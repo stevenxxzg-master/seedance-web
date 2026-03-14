@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seedance</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;max-width:800px;margin:0 auto;padding:24px 20px;color:#1a1a1a;font-size:14px;line-height:1.5}
+h1{font-size:16px;font-weight:600;margin-bottom:20px;letter-spacing:.3px}
+hr{border:none;border-top:1px solid #e0e0e0;margin:24px 0}
+label{font-size:13px;color:#666;display:block;margin-bottom:3px}
+input[type="text"],input[type="number"],input[type="password"],select,textarea{
+  width:100%;padding:6px 8px;border:1px solid #ddd;font:inherit;background:#fff;border-radius:0
+}
+textarea{resize:vertical;min-height:72px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#999}
+button{padding:6px 14px;border:1px solid #1a1a1a;background:#1a1a1a;color:#fff;cursor:pointer;font:inherit;border-radius:0}
+button:hover{background:#333}
+button:disabled{opacity:.4;cursor:default}
+button.s{background:#fff;color:#1a1a1a;border-color:#ddd}
+button.s:hover{border-color:#999}
+.row{display:flex;gap:12px;margin-bottom:14px}
+.row>.f{flex:1}
+.f{margin-bottom:12px}
+.sl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#aaa;margin-bottom:8px}
+.mi{display:flex;gap:8px;align-items:center;margin-bottom:6px;padding:8px;border:1px solid #e0e0e0}
+.mi input[type="text"]{flex:1;min-width:0}
+.mi select{width:auto}
+.badge{font-size:10px;font-weight:700;padding:2px 6px;background:#f0f0f0;white-space:nowrap;letter-spacing:.3px}
+.x{background:none;border:none;color:#bbb;cursor:pointer;padding:0 4px;font-size:16px;line-height:1}
+.x:hover{color:#cf222e}
+.opts{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.opts label{margin:0;font-size:13px;color:#1a1a1a;cursor:pointer;display:flex;align-items:center;gap:4px}
+.up-label{cursor:pointer;padding:4px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap;color:#666}
+.up-label:hover{border-color:#999}
+.up-label input{display:none}
+.file-name{font-size:11px;color:#0969da;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task{padding:12px;border:1px solid #e0e0e0;margin-bottom:8px}
+.th{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.tid{font-family:ui-monospace,monospace;font-size:12px;color:#555}
+.st{font-size:11px;font-weight:600;padding:1px 6px}
+.st.running{color:#0969da;background:#ddf4ff}
+.st.completed{color:#1a7f37;background:#dafbe1}
+.st.failed,.st.cancelled{color:#cf222e;background:#ffebe9}
+.st.submitted,.st.processing{color:#9a6700;background:#fff8c5}
+.task video{max-width:100%;margin-top:8px;display:block;border:1px solid #e0e0e0}
+.ta{margin-top:8px;display:flex;gap:8px;align-items:center}
+.rj{margin-top:8px;font-family:ui-monospace,monospace;font-size:11px;background:#f6f8fa;padding:8px;overflow:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;border:1px solid #eee}
+details summary{font-size:11px;color:#999;cursor:pointer}
+.empty{color:#999;font-size:13px}
+.ma{display:flex;gap:6px;margin-top:10px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<h1>Seedance</h1>
+
+<div class="row">
+  <div class="f" style="flex:2"><label>API Key</label>
+    <input type="password" id="i-key" placeholder="sk-...">
+  </div>
+  <div class="f" style="flex:2"><label>Base URL</label>
+    <input type="text" id="i-base" placeholder="https://www.example.com">
+  </div>
+  <div class="f"><label>Model</label>
+    <select id="i-model">
+      <option value="seedance">seedance</option>
+      <option value="seedance-fast">seedance-fast</option>
+    </select>
+  </div>
+</div>
+
+<div class="row">
+  <div class="f"><label>Resolution</label>
+    <select id="i-res">
+      <option value="720p">720p</option>
+      <option value="480p">480p</option>
+    </select>
+  </div>
+  <div class="f"><label>Ratio</label>
+    <select id="i-ratio">
+      <option value="adaptive">adaptive</option>
+      <option value="16:9">16:9</option>
+      <option value="4:3">4:3</option>
+      <option value="1:1">1:1</option>
+      <option value="3:4">3:4</option>
+      <option value="9:16">9:16</option>
+      <option value="21:9">21:9</option>
+    </select>
+  </div>
+  <div class="f"><label>Duration (s)</label>
+    <input type="number" id="i-dur" value="5" min="-1" max="15">
+  </div>
+</div>
+
+<div class="f"><label>Prompt</label>
+  <textarea id="i-prompt" placeholder="描述你想生成的视频内容..."></textarea>
+</div>
+
+<div class="sl">Media</div>
+<div id="media-list"></div>
+<div class="ma">
+  <button class="s" type="button" onclick="addMedia('image')">+ Image</button>
+  <button class="s" type="button" onclick="addMedia('video')">+ Video</button>
+  <button class="s" type="button" onclick="addMedia('audio')">+ Audio</button>
+</div>
+
+<div class="opts">
+  <label><input type="checkbox" id="i-audio" checked> Generate Audio</label>
+  <label><input type="checkbox" id="i-search"> Web Search</label>
+  <label><input type="checkbox" id="i-wm"> Watermark</label>
+</div>
+
+<button onclick="generate()" id="gen-btn" style="width:100%">Generate</button>
+
+<hr>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+  <span class="sl" style="margin:0">Tasks</span>
+  <span class="x" onclick="clearTasks()" title="Clear history" style="font-size:12px;color:#aaa;cursor:pointer">Clear</span>
+</div>
+<div id="tasks"><p class="empty">No tasks yet</p></div>
+
+<script>
+const MAX_TASKS = 50;
+const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+let pollTimer = null;
+
+function saveTasks() {
+  const slim = tasks.slice(0, MAX_TASKS).map(t => ({
+    id: t.id, status: t.status, progress: t.progress,
+    created: t.created, videoUrl: t.videoUrl,
+  }));
+  localStorage.setItem("tasks", JSON.stringify(slim));
+}
+
+(function init() {
+  const savedKey = localStorage.getItem("apiKey");
+  if (savedKey) document.getElementById("i-key").value = savedKey;
+  document.getElementById("i-key").addEventListener("input", function() {
+    localStorage.setItem("apiKey", this.value.trim());
+  });
+  const savedBase = localStorage.getItem("apiBase");
+  if (savedBase) document.getElementById("i-base").value = savedBase;
+  document.getElementById("i-base").addEventListener("input", function() {
+    localStorage.setItem("apiBase", this.value.trim());
+  });
+  renderTasks();
+  if (tasks.some(t => t.id && !["completed","failed","cancelled"].includes(t.status))) startPolling();
+})();
+
+function apiHeaders() {
+  const key = document.getElementById("i-key").value.trim();
+  const base = document.getElementById("i-base").value.trim();
+  const h = { "Content-Type": "application/json" };
+  if (key) h["X-Api-Key"] = key;
+  if (base) h["X-Api-Base"] = base;
+  return h;
+}
+
+const ROLES = {
+  image: [["first_frame","First Frame"],["last_frame","Last Frame"],["reference_image","Reference"]],
+  video: [["reference_video","Reference"]],
+  audio: [["reference_audio","Reference"]]
+};
+const BADGE = { image: "IMG", video: "VID", audio: "AUD" };
+const ACCEPT = { image: "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif", audio: "audio/wav,audio/mpeg,audio/mp3" };
+
+function addMedia(type) {
+  const el = document.createElement("div");
+  el.className = "mi";
+  el.dataset.type = type;
+
+  let h = `<span class="badge">${BADGE[type]}</span>`;
+  h += `<input type="text" placeholder="URL" class="mu">`;
+
+  if (type !== "video") {
+    h += `<label class="up-label">Upload<input type="file" accept="${ACCEPT[type]}" onchange="handleFile(this)"></label>`;
+    h += `<span class="file-name" hidden></span>`;
+  }
+
+  h += `<select class="mr">`;
+  for (const [v, l] of ROLES[type]) h += `<option value="${v}">${l}</option>`;
+  h += `</select>`;
+  h += `<span class="x" onclick="this.parentElement.remove()">&times;</span>`;
+
+  el.innerHTML = h;
+  document.getElementById("media-list").appendChild(el);
+}
+
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const item = input.closest(".mi");
+  const urlInput = item.querySelector(".mu");
+  const nameSpan = item.querySelector(".file-name");
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    item.dataset.b64 = reader.result;
+    urlInput.value = "";
+    urlInput.disabled = true;
+    urlInput.placeholder = file.name;
+    if (nameSpan) { nameSpan.textContent = file.name; nameSpan.hidden = false; }
+  };
+  reader.readAsDataURL(file);
+}
+
+function buildRequest() {
+  const content = [];
+  const prompt = document.getElementById("i-prompt").value.trim();
+  if (prompt) content.push({ type: "text", text: prompt });
+
+  for (const item of document.querySelectorAll(".mi")) {
+    const type = item.dataset.type;
+    const url = item.dataset.b64 || item.querySelector(".mu").value.trim();
+    const role = item.querySelector(".mr").value;
+    if (!url) continue;
+
+    if (type === "image") content.push({ type: "image_url", image_url: { url }, role });
+    else if (type === "video") content.push({ type: "video_url", video_url: { url }, role });
+    else if (type === "audio") content.push({ type: "audio_url", audio_url: { url }, role });
+  }
+
+  const body = {
+    model: document.getElementById("i-model").value,
+    content,
+    resolution: document.getElementById("i-res").value,
+    ratio: document.getElementById("i-ratio").value,
+    duration: parseInt(document.getElementById("i-dur").value, 10),
+    generate_audio: document.getElementById("i-audio").checked,
+    watermark: document.getElementById("i-wm").checked,
+  };
+
+  if (document.getElementById("i-search").checked) {
+    body.tools = [{ type: "web_search" }];
+  }
+  return body;
+}
+
+async function generate() {
+  const btn = document.getElementById("gen-btn");
+  btn.disabled = true;
+  btn.textContent = "Submitting...";
+
+  try {
+    const body = buildRequest();
+    if (body.content.length === 0) { alert("请至少提供一个 Prompt 或媒体输入"); return; }
+
+    const resp = await fetch("/api/generate", {
+      method: "POST",
+      headers: apiHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || (data.code && data.code !== "success")) {
+      const msg = data.error?.message || data.message || data.error || JSON.stringify(data);
+      alert("Error: " + msg);
+      return;
+    }
+
+    const parsed = parseResponse(data);
+    tasks.unshift({
+      id: parsed.id,
+      status: parsed.status,
+      progress: parsed.progress,
+      created: Date.now(),
+      response: data,
+      videoUrl: parsed.videoUrl,
+      pollErrors: 0,
+    });
+    saveTasks();
+    renderTasks();
+    if (parsed.id) startPolling();
+  } catch (err) {
+    alert("Request failed: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Generate";
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(pollAll, 15000);
+}
+
+async function pollAll() {
+  const TERMINAL = ["completed","failed","cancelled"];
+  const running = tasks.filter(t => t.id && !TERMINAL.includes(t.status));
+  if (running.length === 0) { clearInterval(pollTimer); pollTimer = null; saveTasks(); renderTasks(); return; }
+
+  for (const task of running) {
+    try {
+      const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
+      const data = await resp.json();
+      task.response = data;
+
+      if (resp.ok && data.code !== "fail_to_fetch_task") {
+        const parsed = parseResponse(data);
+        task.status = parsed.status;
+        task.progress = parsed.progress;
+        if (!task.videoUrl) task.videoUrl = parsed.videoUrl;
+        task.pollErrors = 0;
+      } else {
+        task.pollErrors = (task.pollErrors || 0) + 1;
+        if (task.pollErrors >= 5) task.status = "failed";
+      }
+    } catch (e) {
+      console.error(`poll ${task.id}:`, e);
+      task.pollErrors = (task.pollErrors || 0) + 1;
+      if (task.pollErrors >= 5) task.status = "failed";
+    }
+  }
+  saveTasks();
+  renderTasks();
+}
+
+const STATUS_MAP = {
+  "IN_PROGRESS": "running", "SUCCESS": "completed", "FAILED": "failed",
+  "CANCELLED": "cancelled", "running": "running", "completed": "completed",
+  "failed": "failed", "cancelled": "cancelled", "submitted": "submitted",
+};
+
+function parseResponse(raw) {
+  const wrap = raw.data || raw;
+  const inner = wrap.data || wrap;
+  const id = wrap.task_id || inner.id || raw.id;
+  const rawStatus = wrap.status || inner.status || raw.status || "submitted";
+  const status = STATUS_MAP[rawStatus] || rawStatus.toLowerCase();
+  const progress = wrap.progress || null;
+  const videoUrl = findVideoUrl(raw);
+  return { id, status, progress, videoUrl };
+}
+
+function findVideoUrl(d) {
+  if (d.video?.url) return d.video.url;
+  if (d.video_result?.[0]?.url) return d.video_result[0].url;
+  if (d.output?.video_url) return d.output.video_url;
+  const s = JSON.stringify(d);
+  const m = s.match(/(https?:\/\/[^"\\]+\.mp4[^"\\]*)/);
+  return m ? m[1] : null;
+}
+
+function fmtTime(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+}
+
+function renderTasks() {
+  const c = document.getElementById("tasks");
+  if (tasks.length === 0) { c.innerHTML = '<p class="empty">No tasks yet</p>'; return; }
+
+  c.innerHTML = tasks.map(t => {
+    const elapsed = fmtTime(Date.now() - t.created);
+    let h = `<div class="task"><div class="th">
+      <span class="tid">${t.id || "—"}</span>
+      <span><span class="st ${t.status}">${t.status}</span>${t.progress ? `<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>` : ""}
+      <span data-elapsed="${t.id}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed}</span></span>
+    </div>`;
+
+    if (t.videoUrl) {
+      h += `<video src="${esc(t.videoUrl)}" controls preload="metadata"></video>`;
+      h += `<div class="ta">
+        <input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa">
+        <button class="s" onclick="navigator.clipboard.writeText('${esc(t.videoUrl)}')">Copy URL</button>
+        <a href="${esc(t.videoUrl)}" target="_blank" download class="s" style="text-decoration:none;text-align:center">Download</a>
+      </div>`;
+    }
+
+    h += `<details style="margin-top:8px"><summary>Response JSON</summary>
+      <div class="rj">${esc(JSON.stringify(t.response, null, 2))}</div></details>`;
+    return h + "</div>";
+  }).join("");
+}
+
+function clearTasks() {
+  if (!confirm("Clear all task history?")) return;
+  tasks.length = 0;
+  saveTasks();
+  renderTasks();
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+setInterval(() => {
+  const hasRunning = tasks.some(t => t.id && !["completed","failed","cancelled"].includes(t.status));
+  if (!hasRunning) return;
+  document.querySelectorAll("[data-elapsed]").forEach(el => {
+    const task = tasks.find(t => t.id === el.dataset.elapsed);
+    if (task) el.textContent = fmtTime(Date.now() - task.created);
+  });
+}, 1000);
+</script>
+</body>
+</html>
