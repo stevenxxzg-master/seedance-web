@@ -20,6 +20,8 @@ button:hover{background:#333}
 button:disabled{opacity:.4;cursor:default}
 button.s{background:#fff;color:#1a1a1a;border-color:#ddd}
 button.s:hover{border-color:#999}
+a.s{display:inline-block;padding:6px 14px;border:1px solid #ddd;background:#fff;color:#1a1a1a;text-decoration:none;text-align:center;font:inherit;cursor:pointer;border-radius:0}
+a.s:hover{border-color:#999}
 .row{display:flex;gap:12px;margin-bottom:14px}
 .row>.f{flex:1}
 .f{margin-bottom:12px}
@@ -128,22 +130,33 @@ let pollTimer = null;
 function saveTasks() {
   const slim = tasks.slice(0, MAX_TASKS).map(t => ({
     id: t.id, status: t.status, progress: t.progress,
-    created: t.created, videoUrl: t.videoUrl,
+    created: t.created, videoUrl: t.videoUrl, endTime: t.endTime,
+    response: t.response,
   }));
   localStorage.setItem("tasks", JSON.stringify(slim));
 }
 
 (function init() {
-  const savedKey = localStorage.getItem("apiKey");
-  if (savedKey) document.getElementById("i-key").value = savedKey;
-  document.getElementById("i-key").addEventListener("input", function() {
-    localStorage.setItem("apiKey", this.value.trim());
-  });
-  const savedBase = localStorage.getItem("apiBase");
-  if (savedBase) document.getElementById("i-base").value = savedBase;
-  document.getElementById("i-base").addEventListener("input", function() {
-    localStorage.setItem("apiBase", this.value.trim());
-  });
+  // Restore saved form values
+  const fields = {
+    "i-key": "apiKey", "i-base": "apiBase", "i-model": "model",
+    "i-res": "res", "i-ratio": "ratio", "i-dur": "dur", "i-prompt": "prompt",
+  };
+  const checks = { "i-audio": "genAudio", "i-search": "webSearch", "i-wm": "watermark" };
+
+  for (const [id, key] of Object.entries(fields)) {
+    const el = document.getElementById(id);
+    const v = localStorage.getItem(key);
+    if (v !== null) el.value = v;
+    el.addEventListener("input", () => localStorage.setItem(key, el.value));
+  }
+  for (const [id, key] of Object.entries(checks)) {
+    const el = document.getElementById(id);
+    const v = localStorage.getItem(key);
+    if (v !== null) el.checked = v === "true";
+    el.addEventListener("change", () => localStorage.setItem(key, el.checked));
+  }
+
   renderTasks();
   if (tasks.some(t => t.id && !["completed","failed","cancelled"].includes(t.status))) startPolling();
 })();
@@ -162,8 +175,34 @@ const ROLES = {
   video: [["reference_video","Reference"]],
   audio: [["reference_audio","Reference"]]
 };
+const IMAGE_ROLES_REF_ONLY = [["reference_image","Reference"]];
 const BADGE = { image: "IMG", video: "VID", audio: "AUD" };
-const ACCEPT = { image: "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif", audio: "audio/wav,audio/mpeg,audio/mp3" };
+const ACCEPT = {
+  image: "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif",
+  video: "video/mp4,video/quicktime,video/webm",
+  audio: "audio/wav,audio/mpeg,audio/mp3"
+};
+
+function hasVideoOrAudio() {
+  return document.querySelectorAll('.mi[data-type="video"],.mi[data-type="audio"]').length > 0;
+}
+
+function syncImageRoles() {
+  const refOnly = hasVideoOrAudio();
+  for (const item of document.querySelectorAll('.mi[data-type="image"]')) {
+    const sel = item.querySelector(".mr");
+    const cur = sel.value;
+    const opts = refOnly ? IMAGE_ROLES_REF_ONLY : ROLES.image;
+    sel.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+    if (opts.some(([v]) => v === cur)) sel.value = cur;
+    else sel.value = opts[0][0];
+  }
+}
+
+function removeMedia(btn) {
+  btn.parentElement.remove();
+  syncImageRoles();
+}
 
 function addMedia(type) {
   const el = document.createElement("div");
@@ -172,37 +211,77 @@ function addMedia(type) {
 
   let h = `<span class="badge">${BADGE[type]}</span>`;
   h += `<input type="text" placeholder="URL" class="mu">`;
+  h += `<label class="up-label">Upload<input type="file" accept="${ACCEPT[type]}" onchange="handleFile(this)"></label>`;
+  h += `<span class="file-name" hidden></span>`;
 
-  if (type !== "video") {
-    h += `<label class="up-label">Upload<input type="file" accept="${ACCEPT[type]}" onchange="handleFile(this)"></label>`;
-    h += `<span class="file-name" hidden></span>`;
-  }
-
+  // For image, roles depend on whether video/audio exists
+  const roles = type === "image" && hasVideoOrAudio() ? IMAGE_ROLES_REF_ONLY : ROLES[type];
   h += `<select class="mr">`;
-  for (const [v, l] of ROLES[type]) h += `<option value="${v}">${l}</option>`;
+  for (const [v, l] of roles) h += `<option value="${v}">${l}</option>`;
   h += `</select>`;
-  h += `<span class="x" onclick="this.parentElement.remove()">&times;</span>`;
+  h += `<span class="x" onclick="removeMedia(this)">&times;</span>`;
 
   el.innerHTML = h;
   document.getElementById("media-list").appendChild(el);
+  syncImageRoles();
 }
 
-function handleFile(input) {
+async function handleFile(input) {
   const file = input.files[0];
   if (!file) return;
   const item = input.closest(".mi");
   const urlInput = item.querySelector(".mu");
   const nameSpan = item.querySelector(".file-name");
+  const uploadLabel = item.querySelector(".up-label");
+  const isVideo = item.dataset.type === "video";
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    item.dataset.b64 = reader.result;
-    urlInput.value = "";
+  const origText = uploadLabel.childNodes[0].textContent;
+  uploadLabel.childNodes[0].textContent = isVideo ? "Processing..." : "Uploading...";
+  input.disabled = true;
+
+  try {
+    let fileUrl;
+
+    if (isVideo) {
+      // Video goes through server for compression
+      const form = new FormData();
+      form.append("file", file);
+      const resp = await fetch("/api/upload/video", { method: "POST", body: form });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Upload failed: ${resp.status}`);
+      }
+      ({ fileUrl } = await resp.json());
+    } else {
+      // Image/audio upload directly to COS via presign
+      const presignResp = await fetch("/api/cos/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type }),
+      });
+      if (!presignResp.ok) throw new Error("Failed to get upload URL");
+      const presign = await presignResp.json();
+      fileUrl = presign.fileUrl;
+
+      const uploadResp = await fetch(presign.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+    }
+
+    urlInput.value = fileUrl;
     urlInput.disabled = true;
     urlInput.placeholder = file.name;
     if (nameSpan) { nameSpan.textContent = file.name; nameSpan.hidden = false; }
-  };
-  reader.readAsDataURL(file);
+  } catch (err) {
+    alert("Upload failed: " + err.message);
+    input.value = "";
+  } finally {
+    uploadLabel.childNodes[0].textContent = origText;
+    input.disabled = false;
+  }
 }
 
 function buildRequest() {
@@ -212,7 +291,7 @@ function buildRequest() {
 
   for (const item of document.querySelectorAll(".mi")) {
     const type = item.dataset.type;
-    const url = item.dataset.b64 || item.querySelector(".mu").value.trim();
+    const url = item.querySelector(".mu").value.trim();
     const role = item.querySelector(".mr").value;
     if (!url) continue;
 
@@ -290,6 +369,7 @@ async function pollAll() {
   const running = tasks.filter(t => t.id && !TERMINAL.includes(t.status));
   if (running.length === 0) { clearInterval(pollTimer); pollTimer = null; saveTasks(); renderTasks(); return; }
 
+  let changed = false;
   for (const task of running) {
     try {
       const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
@@ -298,22 +378,24 @@ async function pollAll() {
 
       if (resp.ok && data.code !== "fail_to_fetch_task") {
         const parsed = parseResponse(data);
+        if (task.status !== parsed.status || task.progress !== parsed.progress || (!task.videoUrl && parsed.videoUrl)) changed = true;
         task.status = parsed.status;
         task.progress = parsed.progress;
         if (!task.videoUrl) task.videoUrl = parsed.videoUrl;
         task.pollErrors = 0;
+        if (TERMINAL.includes(task.status) && !task.endTime) task.endTime = Date.now();
       } else {
         task.pollErrors = (task.pollErrors || 0) + 1;
-        if (task.pollErrors >= 5) task.status = "failed";
+        if (task.pollErrors >= 5) { task.status = "failed"; task.endTime = Date.now(); changed = true; }
       }
     } catch (e) {
       console.error(`poll ${task.id}:`, e);
       task.pollErrors = (task.pollErrors || 0) + 1;
-      if (task.pollErrors >= 5) task.status = "failed";
+      if (task.pollErrors >= 5) { task.status = "failed"; task.endTime = Date.now(); changed = true; }
     }
   }
   saveTasks();
-  renderTasks();
+  if (changed) renderTasks();
 }
 
 const STATUS_MAP = {
@@ -343,9 +425,15 @@ function findVideoUrl(d) {
 }
 
 function fmtTime(ms) {
+  if (ms < 0) ms = 0;
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
   return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+}
+
+function elapsed(t) {
+  const end = t.endTime || Date.now();
+  return fmtTime(end - t.created);
 }
 
 function renderTasks() {
@@ -353,19 +441,18 @@ function renderTasks() {
   if (tasks.length === 0) { c.innerHTML = '<p class="empty">No tasks yet</p>'; return; }
 
   c.innerHTML = tasks.map(t => {
-    const elapsed = fmtTime(Date.now() - t.created);
     let h = `<div class="task"><div class="th">
       <span class="tid">${t.id || "—"}</span>
       <span><span class="st ${t.status}">${t.status}</span>${t.progress ? `<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>` : ""}
-      <span data-elapsed="${t.id}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed}</span></span>
+      <span data-elapsed="${t.id}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span></span>
     </div>`;
 
     if (t.videoUrl) {
       h += `<video src="${esc(t.videoUrl)}" controls preload="metadata"></video>`;
       h += `<div class="ta">
         <input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa">
-        <button class="s" onclick="navigator.clipboard.writeText('${esc(t.videoUrl)}')">Copy URL</button>
-        <a href="${esc(t.videoUrl)}" target="_blank" download class="s" style="text-decoration:none;text-align:center">Download</a>
+        <button class="s" onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">Copy URL</button>
+        <a href="${esc(t.videoUrl)}" target="_blank" download class="s">Download</a>
       </div>`;
     }
 
@@ -388,12 +475,14 @@ function esc(s) {
   return d.innerHTML;
 }
 
+function escJs(s) {
+  return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
 setInterval(() => {
-  const hasRunning = tasks.some(t => t.id && !["completed","failed","cancelled"].includes(t.status));
-  if (!hasRunning) return;
   document.querySelectorAll("[data-elapsed]").forEach(el => {
     const task = tasks.find(t => t.id === el.dataset.elapsed);
-    if (task) el.textContent = fmtTime(Date.now() - task.created);
+    if (task && !task.endTime) el.textContent = elapsed(task);
   });
 }, 1000);
 </script>

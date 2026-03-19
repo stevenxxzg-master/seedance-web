@@ -2,6 +2,15 @@ import express from "express";
 import { config } from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import COS from "cos-nodejs-sdk-v5";
+import crypto from "crypto";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { createReadStream, unlinkSync, mkdirSync } from "fs";
+import multer from "multer";
+import os from "os";
+
+const execFileAsync = promisify(execFile);
 
 config();
 
@@ -21,7 +30,35 @@ function getKey(req) {
 }
 
 function getBase(req) {
-  return req.headers["x-api-base"] || API_BASE;
+  const base = req.headers["x-api-base"] || API_BASE;
+  // Allowlist: only https to public domains
+  let parsed;
+  try {
+    parsed = new URL(base);
+  } catch {
+    throw new Error("Invalid API base URL");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error("Only HTTPS base URLs are allowed");
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "0.0.0.0" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    host.startsWith("[") ||
+    host.startsWith("0x") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".local") ||
+    /^\d+$/.test(host)
+  ) {
+    throw new Error("Invalid API base URL");
+  }
+  return base;
 }
 
 app.post("/api/generate", async (req, res) => {
@@ -68,10 +105,191 @@ app.get("/api/status/:id", async (req, res) => {
   }
 });
 
+// ── COS Configuration ──
+const COS_BUCKET = process.env.COS_BUCKET;
+const COS_REGION = process.env.COS_REGION;
+const COS_SECRET_ID = process.env.COS_SECRET_ID;
+const COS_SECRET_KEY = process.env.COS_SECRET_KEY;
+const COS_BASE_URL = `https://${COS_BUCKET}.cos.${COS_REGION}.myqcloud.com`;
+
+const cos = new COS({
+  SecretId: COS_SECRET_ID,
+  SecretKey: COS_SECRET_KEY,
+});
+
+// Get presigned upload URL — frontend uploads directly to COS
+app.post("/api/cos/presign", (req, res) => {
+  const { filename, contentType } = req.body;
+  if (!filename || !contentType) {
+    return res.status(400).json({ error: "filename and contentType required" });
+  }
+
+  const ext = filename.split(".").pop() || "bin";
+  const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+
+  cos.getObjectUrl(
+    {
+      Bucket: COS_BUCKET,
+      Region: COS_REGION,
+      Key: key,
+      Method: "PUT",
+      Sign: true,
+      Expires: 600,
+      Headers: { "Content-Type": contentType },
+    },
+    (err, data) => {
+      if (err) {
+        console.error("COS presign error:", err);
+        return res.status(500).json({ error: "Failed to generate upload URL" });
+      }
+      res.json({
+        uploadUrl: data.Url,
+        fileUrl: `${COS_BASE_URL}/${key}`,
+        key,
+      });
+    }
+  );
+});
+
+// ── Video upload with compression ──
+const MAX_PIXELS = 927408;
+const MAX_DURATION = 15;
+const tmpDir = join(os.tmpdir(), "seedance-uploads");
+mkdirSync(tmpDir, { recursive: true });
+
+const upload = multer({ dest: tmpDir, limits: { fileSize: 200 * 1024 * 1024 } });
+
+async function probeVideo(filePath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v", "quiet",
+    "-print_format", "json",
+    "-show_streams", "-show_format",
+    filePath,
+  ]);
+  const info = JSON.parse(stdout);
+  const vs = info.streams.find((s) => s.codec_type === "video");
+  return {
+    width: vs ? parseInt(vs.width, 10) : 0,
+    height: vs ? parseInt(vs.height, 10) : 0,
+    duration: parseFloat(info.format.duration || "0"),
+  };
+}
+
+app.post("/api/upload/video", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file provided" });
+
+  const inputPath = req.file.path;
+  const outName = `${crypto.randomUUID().slice(0, 8)}.mp4`;
+  const outputPath = join(tmpDir, outName);
+
+  try {
+    const { width, height, duration } = await probeVideo(inputPath);
+    const pixels = width * height;
+
+    const ffArgs = ["-i", inputPath, "-y"];
+
+    // Trim duration if needed
+    if (duration > MAX_DURATION) {
+      ffArgs.push("-t", String(MAX_DURATION));
+    }
+
+    // Scale down if pixel count exceeds limit
+    if (pixels > MAX_PIXELS) {
+      const scale = Math.sqrt(MAX_PIXELS / pixels);
+      const newW = Math.floor((width * scale) / 2) * 2;
+      const newH = Math.floor((height * scale) / 2) * 2;
+      ffArgs.push("-vf", `scale=${newW}:${newH}`);
+    }
+
+    ffArgs.push("-c:v", "libx264", "-preset", "fast", "-crf", "23");
+    ffArgs.push("-c:a", "aac", "-b:a", "128k");
+    ffArgs.push(outputPath);
+
+    await execFileAsync("ffmpeg", ffArgs, { timeout: 120000 });
+
+    // Upload to COS
+    const cosKey = `uploads/${Date.now()}_${outName}`;
+    await new Promise((resolve, reject) => {
+      cos.putObject(
+        {
+          Bucket: COS_BUCKET,
+          Region: COS_REGION,
+          Key: cosKey,
+          Body: createReadStream(outputPath),
+          ContentType: "video/mp4",
+        },
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
+
+    res.json({ fileUrl: `${COS_BASE_URL}/${cosKey}` });
+  } catch (err) {
+    console.error("Video processing error:", err);
+    res.status(500).json({ error: "Video processing failed: " + err.message });
+  } finally {
+    try { unlinkSync(inputPath); } catch {}
+    try { unlinkSync(outputPath); } catch {}
+  }
+});
+
+// ── Daily Cleanup: 4am Beijing time (20:00 UTC previous day) ──
+function clearBucket() {
+  console.log("[COS Cleanup] Starting bucket cleanup...");
+  cos.getBucket(
+    { Bucket: COS_BUCKET, Region: COS_REGION, Prefix: "uploads/", MaxKeys: 1000 },
+    (err, data) => {
+      if (err) {
+        console.error("[COS Cleanup] List error:", err);
+        return;
+      }
+      const objects = (data.Contents || []).map((item) => ({ Key: item.Key }));
+      if (objects.length === 0) {
+        console.log("[COS Cleanup] Bucket already empty.");
+        return;
+      }
+      cos.deleteMultipleObject(
+        {
+          Bucket: COS_BUCKET,
+          Region: COS_REGION,
+          Objects: objects,
+        },
+        (delErr) => {
+          if (delErr) {
+            console.error("[COS Cleanup] Delete error:", delErr);
+          } else {
+            console.log(`[COS Cleanup] Deleted ${objects.length} objects.`);
+            // If there were 1000 objects, there might be more — run again
+            if (objects.length >= 1000) clearBucket();
+          }
+        }
+      );
+    }
+  );
+}
+
+function scheduleDailyCleanup() {
+  const now = new Date();
+  // 4:00 AM Beijing = UTC+8, so 20:00 UTC previous day
+  const target = new Date(now);
+  target.setUTCHours(20, 0, 0, 0); // 20:00 UTC = 04:00 Beijing next day
+  if (target <= now) target.setUTCDate(target.getUTCDate() + 1);
+
+  const delay = target - now;
+  console.log(`[COS Cleanup] Next cleanup in ${Math.round(delay / 60000)} minutes`);
+
+  setTimeout(() => {
+    clearBucket();
+    // After first run, repeat every 24 hours
+    setInterval(clearBucket, 24 * 60 * 60 * 1000);
+  }, delay);
+}
+
+scheduleDailyCleanup();
+
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-const PORT = process.env.PORT || 3456;
+const PORT = process.env.PORT || 10100;
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`http://0.0.0.0:${PORT}`);
 });
