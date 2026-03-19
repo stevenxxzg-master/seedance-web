@@ -7,8 +7,11 @@ import crypto from "crypto";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { createReadStream, unlinkSync, mkdirSync } from "fs";
+import { createRequire } from "module";
 import multer from "multer";
 import os from "os";
+
+const require = createRequire(import.meta.url);
 
 const execFileAsync = promisify(execFile);
 
@@ -229,6 +232,56 @@ app.post("/api/upload/video", upload.single("file"), async (req, res) => {
   } finally {
     try { unlinkSync(inputPath); } catch {}
     try { unlinkSync(outputPath); } catch {}
+  }
+});
+
+// ── Volcengine Asset API (SDK proxy) ──
+const VOLC_VERSION = "2024-01-01";
+
+const ALLOWED_ASSET_ACTIONS = new Set([
+  "CreateAssetGroup", "CreateAsset", "ListAssetGroups", "ListAssets",
+  "GetAsset", "GetAssetGroup", "UpdateAssetGroup", "UpdateAsset",
+]);
+
+function createVolcService(ak, sk) {
+  const VolcService = require("@volcengine/openapi").Service;
+  return new VolcService({
+    host: "open.volcengineapi.com",
+    serviceName: "ark",
+    region: "cn-beijing",
+    accessKeyId: ak,
+    secretKey: sk,
+    defaultVersion: VOLC_VERSION,
+  });
+}
+
+app.post("/api/asset/:action", async (req, res) => {
+  const ak = req.headers["x-volc-ak"];
+  const sk = req.headers["x-volc-sk"];
+  if (!ak || !sk) return res.status(401).json({ error: "AK and SK are required" });
+
+  const { action } = req.params;
+  if (!ALLOWED_ASSET_ACTIONS.has(action)) {
+    return res.status(400).json({ error: "Invalid action" });
+  }
+
+  try {
+    const svc = createVolcService(ak, sk);
+    const api = svc.createJSONAPI(action, { Version: VOLC_VERSION, method: "POST" });
+    const data = await api(req.body);
+    console.log("[VOLC]", action, JSON.stringify(data).slice(0, 300));
+
+    // SDK returns response body directly (including errors)
+    if (data?.ResponseMetadata?.Error) {
+      return res.status(400).json(data);
+    }
+    if (data?.error) {
+      return res.status(400).json(data);
+    }
+    res.json(data);
+  } catch (err) {
+    console.error(`Asset API ${action} error:`, err);
+    res.status(502).json({ error: err.message });
   }
 });
 

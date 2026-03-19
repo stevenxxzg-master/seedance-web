@@ -52,6 +52,25 @@ a.s:hover{border-color:#999}
 details summary{font-size:11px;color:#999;cursor:pointer}
 .empty{color:#999;font-size:13px}
 .ma{display:flex;gap:6px;margin-top:10px;margin-bottom:16px}
+.ap-btn{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:16px 7px;background:#1a1a1a;color:#fff;border:none;cursor:pointer;font:inherit;font-size:13px;letter-spacing:4px;z-index:100}
+.ap-btn:hover{background:#333}
+.ap-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:200}
+.ap-ov.open{display:block}
+.ap{position:fixed;right:-420px;top:0;bottom:0;width:400px;background:#fff;border-left:1px solid #e0e0e0;z-index:201;transition:right .2s ease;overflow-y:auto;font-size:13px}
+.ap.open{right:0}
+.ap-hd{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #e0e0e0;position:sticky;top:0;background:#fff;z-index:1}
+.ap-hd h2{font-size:15px;font-weight:600;margin:0}
+.ap-sec{padding:14px 16px;border-bottom:1px solid #f0f0f0}
+.ap-grp{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.ap-grp:hover,.ap-grp.sel{border-color:#1a1a1a}
+.ap-grp.sel{background:#f6f8fa}
+.ap-item{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px}
+.ap-item .tid{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.ap-item img{max-width:100%;max-height:80px;display:block;margin:6px 0;object-fit:contain}
+.ap-item .th{display:flex;justify-content:space-between;align-items:center}
+.ap-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.ap-err{font-size:12px;color:#cf222e;margin-top:6px}
+@media(max-width:500px){.ap{width:100%;right:-100%}}
 </style>
 </head>
 <body>
@@ -121,6 +140,37 @@ details summary{font-size:11px;color:#999;cursor:pointer}
   <span class="x" onclick="clearTasks()" title="Clear history" style="font-size:12px;color:#aaa;cursor:pointer">Clear</span>
 </div>
 <div id="tasks"><p class="empty">No tasks yet</p></div>
+
+<button class="ap-btn" onclick="toggleAP()">素材库</button>
+<div class="ap-ov" id="ap-ov" onclick="toggleAP()"></div>
+<div class="ap" id="ap-panel">
+  <div class="ap-hd"><h2>Asset Library</h2><span class="x" onclick="toggleAP()">&times;</span></div>
+  <div class="ap-sec">
+    <details id="ap-auth-det">
+      <summary class="sl" style="margin-bottom:8px;cursor:pointer">API Credentials (AK/SK)</summary>
+      <div class="f"><label>Access Key</label><input type="password" id="i-ak" placeholder="AK..."></div>
+      <div class="f"><label>Secret Key</label><input type="password" id="i-sk" placeholder="SK..."></div>
+      <button class="s" style="font-size:12px;margin-top:4px" onclick="loadGroups()">Connect</button>
+    </details>
+  </div>
+  <div class="ap-sec">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="sl" style="margin:0">Groups</span>
+      <button class="s" style="padding:2px 8px;font-size:11px" onclick="createGroup()">+ New</button>
+    </div>
+    <div id="ap-groups"><p class="empty">Connect AK/SK first</p></div>
+  </div>
+  <div class="ap-sec" id="ap-assets-sec" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="sl" style="margin:0" id="ap-at">Assets</span>
+      <div style="display:flex;gap:4px">
+        <button class="s" style="padding:2px 8px;font-size:11px" onclick="uploadAssetFile()">Upload</button>
+        <button class="s" style="padding:2px 8px;font-size:11px" onclick="addAssetByUrl()">+ URL</button>
+      </div>
+    </div>
+    <div id="ap-assets"><p class="empty">No assets</p></div>
+  </div>
+</div>
 
 <script>
 const MAX_TASKS = 50;
@@ -485,6 +535,215 @@ setInterval(() => {
     if (task && !task.endTime) el.textContent = elapsed(task);
   });
 }, 1000);
+
+// ── Asset Library Panel ──
+let apGroups = [];
+let apSelGroup = null;
+let apAssets = [];
+let apPoll = null;
+
+(function initAP() {
+  const fields = { "i-ak": "volcAK", "i-sk": "volcSK" };
+  for (const [id, key] of Object.entries(fields)) {
+    const el = document.getElementById(id);
+    const v = localStorage.getItem(key);
+    if (v) el.value = v;
+    el.addEventListener("input", () => localStorage.setItem(key, el.value.trim()));
+  }
+  if (!localStorage.getItem("volcAK") || !localStorage.getItem("volcSK")) {
+    document.getElementById("ap-auth-det").open = true;
+  }
+})();
+
+function apHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "X-Volc-AK": document.getElementById("i-ak").value.trim(),
+    "X-Volc-SK": document.getElementById("i-sk").value.trim(),
+  };
+}
+
+async function apCall(action, body) {
+  const h = apHeaders();
+  if (!h["X-Volc-AK"] || !h["X-Volc-SK"]) {
+    throw new Error("Please enter AK and SK first");
+  }
+  const resp = await fetch(`/api/asset/${action}`, {
+    method: "POST", headers: h, body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (data.ResponseMetadata?.Error) {
+    throw new Error(data.ResponseMetadata.Error.Message || data.ResponseMetadata.Error.Code);
+  }
+  if (data.error) throw new Error(data.error);
+  return data.Result || data;
+}
+
+function toggleAP() {
+  const panel = document.getElementById("ap-panel");
+  const ov = document.getElementById("ap-ov");
+  const opening = !panel.classList.contains("open");
+  panel.classList.toggle("open");
+  ov.classList.toggle("open");
+  if (opening) {
+    const ak = document.getElementById("i-ak").value.trim();
+    const sk = document.getElementById("i-sk").value.trim();
+    if (ak && sk && apGroups.length === 0) loadGroups();
+  } else {
+    clearInterval(apPoll); apPoll = null;
+  }
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("ap-panel").classList.contains("open")) toggleAP();
+});
+
+async function loadGroups() {
+  const el = document.getElementById("ap-groups");
+  el.innerHTML = '<p class="empty">Loading...</p>';
+  try {
+    const r = await apCall("ListAssetGroups", {
+      Filter: { Name: "", GroupType: "AIGC" }, PageNumber: 1, PageSize: 100,
+    });
+    apGroups = r.Items || [];
+    renderGroups();
+    document.getElementById("ap-auth-det").open = false;
+  } catch (err) {
+    el.innerHTML = `<p class="ap-err">${esc(err.message)}</p>`;
+  }
+}
+
+function renderGroups() {
+  const el = document.getElementById("ap-groups");
+  if (apGroups.length === 0) { el.innerHTML = '<p class="empty">No groups yet</p>'; return; }
+  el.innerHTML = apGroups.map(g => {
+    const sel = apSelGroup === g.Id ? " sel" : "";
+    return `<div class="ap-grp${sel}" onclick="selectGroup('${escJs(g.Id)}')">
+      <div><div style="font-weight:500">${esc(g.Name || g.Id)}</div>
+      ${g.Description ? `<div style="font-size:11px;color:#888">${esc(g.Description)}</div>` : ""}</div>
+    </div>`;
+  }).join("");
+}
+
+async function createGroup() {
+  const name = prompt("Group name (max 64 chars):");
+  if (!name || !name.trim()) return;
+  if (name.length > 64) { alert("Name must be 64 characters or less"); return; }
+  try {
+    const r = await apCall("CreateAssetGroup", { Name: name.trim(), GroupType: "AIGC" });
+    await loadGroups();
+    selectGroup(r.Id);
+  } catch (err) { alert("Failed: " + err.message); }
+}
+
+async function selectGroup(gid) {
+  apSelGroup = gid;
+  renderGroups();
+  document.getElementById("ap-assets-sec").hidden = false;
+  const g = apGroups.find(x => x.Id === gid);
+  document.getElementById("ap-at").textContent = g ? g.Name : "Assets";
+  await loadAssets();
+}
+
+async function loadAssets() {
+  if (!apSelGroup) return;
+  const el = document.getElementById("ap-assets");
+  el.innerHTML = '<p class="empty">Loading...</p>';
+  try {
+    const r = await apCall("ListAssets", {
+      Filter: { GroupIds: [apSelGroup], GroupType: "AIGC" },
+      PageNumber: 1, PageSize: 100, SortBy: "CreateTime", SortOrder: "Desc",
+    });
+    apAssets = r.Items || [];
+    renderAssets();
+    if (apAssets.some(a => a.Status === "Processing")) startAPPoll();
+  } catch (err) {
+    el.innerHTML = `<p class="ap-err">${esc(err.message)}</p>`;
+  }
+}
+
+function renderAssets() {
+  const el = document.getElementById("ap-assets");
+  if (apAssets.length === 0) { el.innerHTML = '<p class="empty">Upload an image to get started</p>'; return; }
+  el.innerHTML = apAssets.map(a => {
+    const sc = a.Status === "Active" ? "completed" : a.Status === "Failed" ? "failed" : "processing";
+    let h = `<div class="ap-item"><div class="th">
+      <span class="tid" title="${esc(a.Id)}">${esc(a.Name || a.Id)}</span>
+      <span class="st ${sc}">${a.Status}</span></div>`;
+    if (a.URL && a.Status === "Active") h += `<img src="${esc(a.URL)}" loading="lazy">`;
+    if (a.Error?.Message) h += `<div class="ap-err">${esc(a.Error.Message)}</div>`;
+    if (a.Status === "Active") {
+      h += `<button onclick="useAsset('${escJs(a.Id)}')" style="margin-top:6px;width:100%;font-size:12px">Use in Generation</button>`;
+    }
+    return h + "</div>";
+  }).join("");
+}
+
+async function uploadAssetFile() {
+  if (!apSelGroup) { alert("Select a group first"); return; }
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif";
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 30 * 1024 * 1024) { alert("File must be under 30 MB"); return; }
+    try {
+      const pr = await fetch("/api/cos/presign", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type }),
+      });
+      if (!pr.ok) throw new Error("Failed to get upload URL");
+      const ps = await pr.json();
+      const up = await fetch(ps.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      if (!up.ok) throw new Error("COS upload failed");
+      await apCall("CreateAsset", {
+        GroupId: apSelGroup, URL: ps.fileUrl, AssetType: "Image", Name: file.name,
+      });
+      await loadAssets();
+    } catch (err) { alert("Upload failed: " + err.message); }
+  };
+  input.click();
+}
+
+async function addAssetByUrl() {
+  if (!apSelGroup) { alert("Select a group first"); return; }
+  const url = prompt("Image URL (publicly accessible):");
+  if (!url || !url.trim()) return;
+  try {
+    await apCall("CreateAsset", {
+      GroupId: apSelGroup, URL: url.trim(), AssetType: "Image",
+    });
+    await loadAssets();
+  } catch (err) { alert("Failed: " + err.message); }
+}
+
+function useAsset(assetId) {
+  addMedia("image");
+  const items = document.querySelectorAll('.mi[data-type="image"]');
+  const last = items[items.length - 1];
+  last.querySelector(".mu").value = `asset://${assetId}`;
+  last.querySelector(".mr").value = "reference_image";
+  toggleAP();
+}
+
+function startAPPoll() {
+  if (apPoll) return;
+  apPoll = setInterval(pollAPAssets, 5000);
+}
+
+async function pollAPAssets() {
+  const proc = apAssets.filter(a => a.Status === "Processing");
+  if (proc.length === 0) { clearInterval(apPoll); apPoll = null; return; }
+  let changed = false;
+  for (const a of proc) {
+    try {
+      const r = await apCall("GetAsset", { Id: a.Id });
+      if (r.Status !== a.Status) { Object.assign(a, r); changed = true; }
+    } catch (err) { console.error("poll asset:", err); }
+  }
+  if (changed) renderAssets();
+}
 </script>
 </body>
 </html>
