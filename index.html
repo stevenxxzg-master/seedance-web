@@ -31,7 +31,7 @@ a.s:hover{border-color:#999}
 .media-stack{flex-shrink:0;position:relative;min-height:64px;display:flex;align-items:center;gap:6px}
 .media-stack.empty-stack{min-height:auto;gap:0}
 .stack-items{position:relative;width:52px;height:64px;flex-shrink:0}
-.stack-items:hover{width:auto;display:flex;gap:8px;height:auto;align-items:flex-start}
+.stack-items:hover{width:auto;display:flex;gap:8px;height:64px;align-items:flex-start}
 .stack-item{position:absolute;width:52px;height:64px;border-radius:12px;overflow:hidden;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.14);cursor:pointer;flex-shrink:0;transition:all .25s ease}
 .stack-items:hover .stack-item{position:relative;transform:none!important;left:auto!important;top:auto!important;border-color:#e2e4e8;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .stack-item img,.stack-item video{width:100%;height:100%;object-fit:cover}
@@ -77,18 +77,15 @@ a.s:hover{border-color:#999}
 .pill{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid #eceef0;border-radius:12px;background:#fff;font-size:13px;color:#444;cursor:pointer;white-space:nowrap;transition:all .12s;position:relative;user-select:none;line-height:1.2}
 .pill:hover{border-color:#d8dadd;background:#f9fafb}
 .pill.active{border-color:#d0d2d5;background:#f5f6f8}
-.pill-icon{display:flex;align-items:center;color:#999}
+.pill-icon{display:flex;align-items:center;color:inherit}
 .pill-icon svg{width:15px;height:15px}
 .pill-chevron{font-size:10px;color:#bbb;margin-left:2px;transition:transform .15s}
 .pill.active .pill-chevron{transform:rotate(180deg)}
-.pill-blue{color:#3d9be9;border-color:#d8ecfb}
-.pill-blue .pill-icon{color:#3d9be9}
-.pill-blue:hover{background:#f0f7fd;border-color:#c8e0f5}
 .send-btn{margin-left:auto;width:36px;height:36px;padding:0;background:#1a1a1a;color:#fff;border:none;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
 .send-btn:hover{background:#333;transform:scale(1.05)}
 .send-btn:disabled{opacity:.3;cursor:default;transform:none}
 .send-btn svg{width:18px;height:18px}
-.credits{font-size:13px;color:#999;display:flex;align-items:center;gap:3px;margin-left:2px;white-space:nowrap}
+
 
 /* ── Popups ── */
 .popup{display:none;position:absolute;background:#fff;border:1px solid #eee;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:100;min-width:140px}
@@ -210,7 +207,7 @@ details summary{font-size:11px;color:#999;cursor:pointer}
     </div>
     <!-- Reference mode -->
     <div class="pill" onclick="togglePill('ref-popup',this)">
-      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span>
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
       <span id="ref-label">全能参考</span>
       <span class="pill-chevron"><svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <input type="hidden" id="i-ref" value="all">
@@ -243,7 +240,7 @@ details summary{font-size:11px;color:#999;cursor:pointer}
   </div>
   <!-- Ref mode popup -->
   <div class="popup" id="ref-popup">
-    <div class="popup-item selected" data-value="all" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span> 全能参考 <span class="check">&#x2713;</span></div>
+    <div class="popup-item selected" data-value="all" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> 全能参考 <span class="check">&#x2713;</span></div>
     <div class="popup-item" data-value="keyframes" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/></svg></span> 首尾帧 <span class="check" style="display:none">&#x2713;</span></div>
   </div>
   <!-- Ratio popup -->
@@ -534,15 +531,19 @@ function buildMentionList() {
     const typeLabel = m.type === "image" ? "图片" : m.type === "video" ? "视频" : "音频";
     const num = mediaItems.filter((x, j) => x.type === m.type && j <= i).length;
     let thumb = '';
-    if (m.thumbUrl) {
+    if (m.thumbUrl && m.type === "video") {
+      thumb = `<video src="${esc(m.thumbUrl)}" muted style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block"></video>`;
+    } else if (m.thumbUrl) {
       thumb = `<img src="${esc(m.thumbUrl)}" width="36" height="36" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block">`;
     } else {
       const icons = { image: "🖼", video: "🎬", audio: "🎵" };
       thumb = `<div class="mi-placeholder">${icons[m.type]}</div>`;
     }
     const active = i === 0 ? " active" : "";
+    const colorMap = { image: "#3d9be9", video: "#e67e22", audio: "#27ae60" };
+    const tagColor = colorMap[m.type];
     return `<div class="mention-item${active}" onclick="insertMention('${typeLabel}${num}')">
-      ${thumb}<span>${typeLabel}${num}</span>
+      ${thumb}<span style="color:${tagColor};font-weight:500">${typeLabel}${num}</span>
     </div>`;
   }).join("");
 }
@@ -598,8 +599,11 @@ function updateHighlight() {
   const hl = document.getElementById("prompt-highlight");
   const val = ta.value;
   if (!val) { hl.innerHTML = ""; return; }
-  // Match @图片1, @视频2, @音频1 etc - with or without trailing content
-  hl.innerHTML = esc(val).replace(/@(图片|视频|音频)\d+/g, '<span class="mention">$&</span>') + '\n';
+  // Match @图片1, @视频2, @音频1 etc - color by type
+  hl.innerHTML = esc(val).replace(/@(图片|视频|音频)(\d+)/g, (match, type) => {
+    const c = type === "图片" ? "#3d9be9" : type === "视频" ? "#e67e22" : "#27ae60";
+    return `<span class="mention" style="color:${c}">${match}</span>`;
+  }) + '\n';
 }
 
 function onPromptInput() {
@@ -692,7 +696,13 @@ function addMedia(type) {
 
 function removeMediaItem(id) {
   const idx = mediaItems.findIndex(m => m.id === id);
-  if (idx >= 0) mediaItems.splice(idx, 1);
+  if (idx >= 0) {
+    const item = mediaItems[idx];
+    if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(item.thumbUrl);
+    }
+    mediaItems.splice(idx, 1);
+  }
   renderStack();
 }
 
@@ -756,19 +766,19 @@ function generateRotations(n) {
   for (let i = 0; i < n; i++) r.push(-10 + (20 / (n - 1)) * i);
   return r;
 }
-function generateOffsets(n) {
-  const o = [];
-  for (let i = 0; i < n; i++) o.push([-8 + (16 / (n - 1)) * i, 6 - (12 / (n - 1)) * i]);
-  return o;
-}
-
 function triggerReupload(id) {
   const item = mediaItems.find(m => m.id === id);
   if (!item) return;
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = ACCEPT[item.type];
-  input.onchange = () => handleFileForItem(id, input.files[0]);
+  input.accept = ALL_ACCEPT;
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    // Update type based on new file
+    item.type = detectFileType(file);
+    handleFileForItem(id, file);
+  };
   input.click();
 }
 
@@ -779,7 +789,10 @@ async function handleFileForItem(id, file) {
   item.name = file.name;
   item.file = file;
 
-  // Local preview
+  // Local preview (revoke old blob URL to prevent memory leak)
+  if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(item.thumbUrl);
+  }
   if (item.type === "image" || item.type === "video") {
     item.thumbUrl = URL.createObjectURL(file);
   }
@@ -813,7 +826,6 @@ async function handleFileForItem(id, file) {
       if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     }
     item.url = fileUrl;
-    if (item.type === "video") item.thumbUrl = fileUrl;
     renderStack();
   } catch (err) {
     alert("上传失败: " + err.message);
