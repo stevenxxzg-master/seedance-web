@@ -196,7 +196,7 @@ details summary{font-size:11px;color:#999;cursor:pointer}
     <!-- Model -->
     <div class="pill" onclick="togglePill('model-popup',this)">
       <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
-      <span id="model-label">Seedance 2.0</span>
+      <span id="model-label">Seedance</span>
       <input type="hidden" id="i-model" value="seedance">
     </div>
     <!-- Reference mode -->
@@ -235,8 +235,8 @@ details summary{font-size:11px;color:#999;cursor:pointer}
   <!-- Popups (positioned relative to compose) -->
   <!-- Model popup -->
   <div class="popup" id="model-popup">
-    <div class="popup-item" data-value="seedance" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9"/></svg></span> Seedance 2.0 <span class="check" id="chk-seedance">&#x2713;</span></div>
-    <div class="popup-item" data-value="seedance-fast" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Seedance 2.0 Fast <span class="check" id="chk-seedance-fast" style="display:none">&#x2713;</span></div>
+    <div class="popup-item" data-value="seedance" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9"/></svg></span> Seedance <span class="check" id="chk-seedance">&#x2713;</span></div>
+    <div class="popup-item" data-value="seedance-fast" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Seedance Fast <span class="check" id="chk-seedance-fast" style="display:none">&#x2713;</span></div>
   </div>
   <!-- Ref mode popup -->
   <div class="popup" id="ref-popup">
@@ -316,7 +316,7 @@ const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],
   }
   // Restore model label
   const m = document.getElementById("i-model").value;
-  document.getElementById("model-label").textContent = m === "seedance-fast" ? "Seedance 2.0 Fast" : "Seedance 2.0";
+  document.getElementById("model-label").textContent = m === "seedance-fast" ? "Seedance Fast" : "Seedance";
   document.getElementById("chk-seedance").style.display = m === "seedance" ? "" : "none";
   document.getElementById("chk-seedance-fast").style.display = m === "seedance-fast" ? "" : "none";
 
@@ -448,7 +448,7 @@ function selectModel(el) {
   const v = el.dataset.value;
   document.getElementById("i-model").value = v;
   localStorage.setItem("model", v);
-  document.getElementById("model-label").textContent = v === "seedance-fast" ? "Seedance 2.0 Fast" : "Seedance 2.0";
+  document.getElementById("model-label").textContent = v === "seedance-fast" ? "Seedance Fast" : "Seedance";
   document.getElementById("chk-seedance").style.display = v === "seedance" ? "" : "none";
   document.getElementById("chk-seedance-fast").style.display = v === "seedance-fast" ? "" : "none";
   closeAllPopups();
@@ -1114,7 +1114,7 @@ function restoreInput(taskId) {
   // Model
   document.getElementById("i-model").value = inp.model || "seedance";
   localStorage.setItem("model", inp.model || "seedance");
-  document.getElementById("model-label").textContent = inp.model === "seedance-fast" ? "Seedance 2.0 Fast" : "Seedance 2.0";
+  document.getElementById("model-label").textContent = inp.model === "seedance-fast" ? "Seedance Fast" : "Seedance";
   document.getElementById("chk-seedance").style.display = inp.model === "seedance" ? "" : "none";
   document.getElementById("chk-seedance-fast").style.display = inp.model === "seedance-fast" ? "" : "none";
 
