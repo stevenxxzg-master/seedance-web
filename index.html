@@ -827,6 +827,7 @@ async function handleFileForItem(id, file) {
         const assetId = await createImageAsset(fileUrl, item.name);
         console.log("[Asset] Step 3: Asset created! ID:", assetId);
         item.url = "asset://" + assetId;
+        await new Promise(r => setTimeout(r, 1000));
         console.log("[Asset] Step 4: item.url set to:", item.url);
       } catch (err) {
         console.warn("[Asset] Failed, keeping COS URL:", err.message);
@@ -976,7 +977,6 @@ async function generate() {
   try {
     // Wait for any pending uploads to finish
     if (pendingUploads > 0) {
-      btn.textContent = "上传中...";
       while (pendingUploads > 0) await new Promise(r => setTimeout(r, 200));
     }
     const body = buildRequest();
