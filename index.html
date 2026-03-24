@@ -125,6 +125,19 @@ a.s:hover{border-color:#999}
 .ta{margin-top:8px;display:flex;gap:8px;align-items:center}
 .rj{margin-top:8px;font-family:ui-monospace,monospace;font-size:11px;background:#f6f8fa;padding:8px;overflow:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;border:1px solid #eee;border-radius:8px}
 details summary{font-size:11px;color:#999;cursor:pointer}
+/* ── Task Input Summary ── */
+.task-input{margin-top:8px;padding:10px 12px;background:#f8f9fb;border:1px solid #eceef2;border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s}
+.task-input:hover{border-color:#c8ccd2;background:#f0f2f6}
+.task-input-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.task-input-reuse{font-size:11px;color:#888;display:flex;align-items:center;gap:3px;opacity:0;transition:opacity .15s}
+.task-input:hover .task-input-reuse{opacity:1}
+.task-input-prompt{font-size:13px;color:#333;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
+.task-input-media{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.task-input-thumb{width:40px;height:40px;border-radius:8px;overflow:hidden;border:1px solid #e0e2e6;flex-shrink:0}
+.task-input-thumb img,.task-input-thumb video{width:100%;height:100%;object-fit:cover}
+.task-input-thumb-icon{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f0f2f5;font-size:16px}
+.task-input-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.task-input-tag{font-size:10px;padding:2px 6px;border-radius:4px;background:#eceef2;color:#666}
 
 /* ── Settings ── */
 .settings{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
@@ -132,25 +145,6 @@ details summary{font-size:11px;color:#999;cursor:pointer}
 .settings label{font-size:11px;color:#999;margin-bottom:2px}
 .f{margin-bottom:12px}
 
-/* ── Asset Panel ── */
-.ap-btn{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:16px 7px;background:#1a1a1a;color:#fff;border:none;cursor:pointer;font:inherit;font-size:13px;letter-spacing:4px;z-index:100;border-radius:8px 0 0 8px}
-.ap-btn:hover{background:#333}
-.ap-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:200}
-.ap-ov.open{display:block}
-.ap{position:fixed;right:-420px;top:0;bottom:0;width:400px;background:#fff;border-left:1px solid #e0e0e0;z-index:201;transition:right .25s ease;overflow-y:auto;font-size:13px}
-.ap.open{right:0}
-.ap-hd{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #e0e0e0;position:sticky;top:0;background:#fff;z-index:1}
-.ap-hd h2{font-size:15px;font-weight:600;margin:0}
-.ap-sec{padding:14px 16px;border-bottom:1px solid #f0f0f0}
-.ap-grp{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-radius:8px}
-.ap-grp:hover,.ap-grp.sel{border-color:#1a1a1a}
-.ap-grp.sel{background:#f6f8fa}
-.ap-item{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px;border-radius:8px}
-.ap-item .tid{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
-.ap-item img{max-width:100%;max-height:80px;display:block;margin:6px 0;object-fit:contain;border-radius:6px}
-.ap-item .th{display:flex;justify-content:space-between;align-items:center}
-.ap-err{font-size:12px;color:#cf222e;margin-top:6px}
-@media(max-width:500px){.ap{width:100%;right:-100%}}
 </style>
 </head>
 <body>
@@ -261,7 +255,6 @@ details summary{font-size:11px;color:#999;cursor:pointer}
 
 <!-- Resolution (hidden, keep for API) -->
 <input type="hidden" id="i-res" value="720p">
-<input type="hidden" id="i-audio" value="true">
 
 <hr>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -270,41 +263,6 @@ details summary{font-size:11px;color:#999;cursor:pointer}
 </div>
 <div id="tasks"><p class="empty">No tasks yet</p></div>
 
-<button class="ap-btn" onclick="toggleAP()">素材库</button>
-<div class="ap-ov" id="ap-ov" onclick="toggleAP()"></div>
-<div class="ap" id="ap-panel">
-  <div class="ap-hd"><h2>Asset Library</h2><span class="x" onclick="toggleAP()">&times;</span></div>
-  <div class="ap-sec" id="ap-nick-sec">
-    <div class="f"><label>Your Nickname</label>
-      <div style="display:flex;gap:6px"><input type="text" id="i-nick" placeholder="Enter nickname..." maxlength="20">
-      <button style="white-space:nowrap;font-size:12px" onclick="saveNick()">Enter</button></div>
-    </div>
-    <p style="font-size:11px;color:#888;margin-top:4px">Used to isolate your assets from other users</p>
-  </div>
-  <div id="ap-main" hidden>
-    <div class="ap-sec" style="padding:8px 16px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:12px;color:#888" id="ap-nick-display"></span>
-      <span class="x" onclick="clearNick()" title="Switch user" style="font-size:11px;color:#aaa">Switch</span>
-    </div>
-    <div class="ap-sec">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span class="sl" style="margin:0">Groups</span>
-        <button class="s" style="padding:2px 8px;font-size:11px" onclick="createGroup()">+ New</button>
-      </div>
-      <div id="ap-groups"><p class="empty">Loading...</p></div>
-    </div>
-    <div class="ap-sec" id="ap-assets-sec" hidden>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span class="sl" style="margin:0" id="ap-at">Assets</span>
-        <div style="display:flex;gap:4px">
-          <button class="s" style="padding:2px 8px;font-size:11px" onclick="uploadAssetFile()">Upload</button>
-          <button class="s" style="padding:2px 8px;font-size:11px" onclick="addAssetByUrl()">+ URL</button>
-        </div>
-      </div>
-      <div id="ap-assets"><p class="empty">No assets</p></div>
-    </div>
-  </div>
-</div>
 
 <script>
 // ── State ──
@@ -344,11 +302,6 @@ const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],
     if (v !== null) el.checked = v === "true";
     el.addEventListener("change", () => localStorage.setItem(key, el.checked));
   }
-  // Sync hidden audio checkbox
-  const audioEl = document.getElementById("i-audio");
-  const av = localStorage.getItem("genAudio");
-  if (av !== null) audioEl.value = av;
-
   // Restore model label
   const m = document.getElementById("i-model").value;
   document.getElementById("model-label").textContent = m === "seedance-fast" ? "Seedance 2.0 Fast" : "Seedance 2.0";
@@ -606,9 +559,14 @@ function updateHighlight() {
   }) + '\n';
 }
 
+let isComposing = false;
+document.getElementById("i-prompt").addEventListener("compositionstart", () => { isComposing = true; });
+document.getElementById("i-prompt").addEventListener("compositionend", () => { isComposing = false; onPromptInput(); });
+
 function onPromptInput() {
   autoResize();
   updateHighlight();
+  if (isComposing) return; // Skip during IME composition
   const ta = document.getElementById("i-prompt");
   const pos = ta.selectionStart;
   if (pos > 0 && ta.value[pos - 1] === "@") {
@@ -826,6 +784,15 @@ async function handleFileForItem(id, file) {
       if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     }
     item.url = fileUrl;
+    // Auto-create asset for images
+    if (item.type === "image") {
+      try {
+        const assetId = await createImageAsset(fileUrl, item.name);
+        item.url = "asset://" + assetId;
+      } catch (err) {
+        console.warn("Asset creation failed, using COS URL:", err);
+      }
+    }
     renderStack();
   } catch (err) {
     alert("上传失败: " + err.message);
@@ -841,6 +808,11 @@ function pickKfFile(which) {
   input.onchange = () => {
     const file = input.files[0];
     if (!file) return;
+    // Revoke old blob URL
+    const old = which === "first" ? kfFirst : kfLast;
+    if (old && old.thumbUrl && old.thumbUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(old.thumbUrl);
+    }
     const thumbUrl = URL.createObjectURL(file);
     const obj = { url: "", thumbUrl, name: file.name, file };
     if (which === "first") kfFirst = obj; else kfLast = obj;
@@ -852,6 +824,10 @@ function pickKfFile(which) {
 
 function removeKf(which, e) {
   e.stopPropagation();
+  const obj = which === "first" ? kfFirst : kfLast;
+  if (obj && obj.thumbUrl && obj.thumbUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(obj.thumbUrl);
+  }
   if (which === "first") kfFirst = null; else kfLast = null;
   renderKfCard(which);
 }
@@ -884,6 +860,13 @@ async function uploadKfFile(which, file) {
     });
     if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     obj.url = presign.fileUrl;
+    // Auto-create asset for keyframe image
+    try {
+      const assetId = await createImageAsset(presign.fileUrl, file.name);
+      obj.url = "asset://" + assetId;
+    } catch (err) {
+      console.warn("Asset creation failed, using COS URL:", err);
+    }
   } catch (err) {
     alert("上传失败: " + err.message);
     if (which === "first") kfFirst = null; else kfLast = null;
@@ -952,6 +935,20 @@ async function generate() {
   try {
     const body = buildRequest();
     if (body.content.length === 0) { alert("请至少提供一个 Prompt 或媒体输入"); return; }
+    // Capture input snapshot before sending
+    const refMode = document.getElementById("i-ref").value;
+    const inputSnapshot = {
+      prompt: document.getElementById("i-prompt").value.trim(),
+      model: document.getElementById("i-model").value,
+      ratio: document.getElementById("i-ratio").value,
+      duration: parseInt(document.getElementById("i-dur").value, 10),
+      refMode,
+      webSearch: document.getElementById("i-search")?.checked || false,
+      watermark: document.getElementById("i-wm")?.checked || false,
+      mediaItems: refMode === "all" ? mediaItems.filter(m => m.url).map(m => ({ type: m.type, url: m.url, name: m.name })) : [],
+      kfFirst: (kfFirst && kfFirst.url) ? { url: kfFirst.url, name: kfFirst.name } : null,
+      kfLast: (kfLast && kfLast.url) ? { url: kfLast.url, name: kfLast.name } : null,
+    };
     const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(body) });
     const data = await resp.json();
     if (!resp.ok || (data.code && data.code !== "success")) {
@@ -959,7 +956,7 @@ async function generate() {
       return;
     }
     const parsed = parseResponse(data);
-    tasks.unshift({ id: parsed.id, status: parsed.status, progress: parsed.progress, created: Date.now(), response: data, videoUrl: parsed.videoUrl, pollErrors: 0 });
+    tasks.unshift({ id: parsed.id, status: parsed.status, progress: parsed.progress, created: Date.now(), response: data, videoUrl: parsed.videoUrl, pollErrors: 0, input: inputSnapshot });
     saveTasks(); renderTasks();
     if (parsed.id) startPolling();
   } catch (err) { alert("Request failed: " + err.message); }
@@ -968,7 +965,7 @@ async function generate() {
 
 // ── Task management ──
 function saveTasks() {
-  const slim = tasks.slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response }));
+  const slim = tasks.slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response, input:t.input }));
   localStorage.setItem("tasks", JSON.stringify(slim));
 }
 
@@ -1019,11 +1016,128 @@ function findVideoUrl(d) {
 function fmtTime(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000),m=Math.floor(s/60);return m>0?`${m}m ${s%60}s`:`${s}s`}
 function elapsed(t){return fmtTime((t.endTime||Date.now())-t.created)}
 
+function renderTaskInput(t) {
+  if (!t.input) return '';
+  const inp = t.input;
+  let h = `<div class="task-input" onclick="restoreInput('${escJs(t.id)}')">`;
+  h += `<div class="task-input-header"><span style="font-size:11px;color:#999">Input</span><span class="task-input-reuse"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg> Re-use</span></div>`;
+  if (inp.prompt) {
+    h += `<div class="task-input-prompt">${esc(inp.prompt)}</div>`;
+  }
+  // Thumbnails
+  const thumbs = [];
+  if (inp.refMode === 'keyframes') {
+    if (inp.kfFirst) thumbs.push({ type:'image', url:inp.kfFirst.url, label:'首帧' });
+    if (inp.kfLast) thumbs.push({ type:'image', url:inp.kfLast.url, label:'尾帧' });
+  } else if (inp.mediaItems && inp.mediaItems.length) {
+    for (const m of inp.mediaItems) thumbs.push({ type:m.type, url:m.url, label:m.name });
+  }
+  if (thumbs.length) {
+    h += '<div class="task-input-media">';
+    for (const th of thumbs) {
+      h += '<div class="task-input-thumb">';
+      if (th.type === 'video') {
+        h += `<video src="${esc(th.url)}" muted preload="metadata" title="${esc(th.label)}"></video>`;
+      } else if (th.type === 'image') {
+        h += `<img src="${esc(th.url)}" loading="lazy" title="${esc(th.label)}" onerror="this.parentNode.innerHTML='<div class=\\'task-input-thumb-icon\\'>🖼</div>'">`;
+      } else {
+        h += `<div class="task-input-thumb-icon" title="${esc(th.label)}">🎵</div>`;
+      }
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+  // Tags
+  const ml = inp.model === 'seedance-fast' ? 'Fast' : '2.0';
+  const rl = inp.refMode === 'keyframes' ? '首尾帧' : '全能参考';
+  h += `<div class="task-input-tags"><span class="task-input-tag">${esc(ml)}</span><span class="task-input-tag">${esc(rl)}</span><span class="task-input-tag">${esc(inp.ratio)}</span><span class="task-input-tag">${inp.duration}s</span></div>`;
+  return h + '</div>';
+}
+
+function restoreInput(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  if (!task || !task.input) return;
+  const inp = task.input;
+
+  // Prompt
+  document.getElementById("i-prompt").value = inp.prompt || "";
+  autoResize();
+  updateHighlight();
+
+  // Model
+  document.getElementById("i-model").value = inp.model || "seedance";
+  localStorage.setItem("model", inp.model || "seedance");
+  document.getElementById("model-label").textContent = inp.model === "seedance-fast" ? "Seedance 2.0 Fast" : "Seedance 2.0";
+  document.getElementById("chk-seedance").style.display = inp.model === "seedance" ? "" : "none";
+  document.getElementById("chk-seedance-fast").style.display = inp.model === "seedance-fast" ? "" : "none";
+
+  // Ratio & Duration (reuse existing functions which also update UI + localStorage)
+  selectRatio(inp.ratio || "1:1");
+  selectDur(inp.duration || 15);
+
+  // Ref mode
+  document.getElementById("i-ref").value = inp.refMode || "all";
+  const refLabels = { all:"全能参考", keyframes:"首尾帧" };
+  document.getElementById("ref-label").textContent = refLabels[inp.refMode] || "全能参考";
+  document.querySelectorAll("#ref-popup .popup-item").forEach(item => {
+    item.classList.toggle("selected", item.dataset.value === inp.refMode);
+    item.querySelector(".check").style.display = item.dataset.value === inp.refMode ? "" : "none";
+  });
+  syncRefMode();
+
+  // Checkboxes
+  const se = document.getElementById("i-search");
+  if (se) { se.checked = inp.webSearch || false; localStorage.setItem("webSearch", se.checked); }
+  const wm = document.getElementById("i-wm");
+  if (wm) { wm.checked = inp.watermark || false; localStorage.setItem("watermark", wm.checked); }
+
+  // Clear existing media
+  for (const m of mediaItems) {
+    if (m.thumbUrl && m.thumbUrl.startsWith("blob:")) URL.revokeObjectURL(m.thumbUrl);
+  }
+  mediaItems.length = 0;
+  if (kfFirst && kfFirst.thumbUrl && kfFirst.thumbUrl.startsWith("blob:")) URL.revokeObjectURL(kfFirst.thumbUrl);
+  if (kfLast && kfLast.thumbUrl && kfLast.thumbUrl.startsWith("blob:")) URL.revokeObjectURL(kfLast.thumbUrl);
+  kfFirst = null;
+  kfLast = null;
+
+  // Restore media
+  if (inp.refMode === "all" && inp.mediaItems) {
+    for (const m of inp.mediaItems) {
+      mediaItems.push({
+        id: ++mediaIdCounter,
+        type: m.type,
+        url: m.url,
+        thumbUrl: m.url.startsWith("asset://") ? "" : m.url,
+        name: m.name,
+        file: null
+      });
+    }
+  }
+  renderStack();
+
+  // Restore keyframes
+  if (inp.refMode === "keyframes") {
+    if (inp.kfFirst) {
+      kfFirst = { url: inp.kfFirst.url, thumbUrl: inp.kfFirst.url, name: inp.kfFirst.name, file: null };
+      renderKfCard("first");
+    }
+    if (inp.kfLast) {
+      kfLast = { url: inp.kfLast.url, thumbUrl: inp.kfLast.url, name: inp.kfLast.name, file: null };
+      renderKfCard("last");
+    }
+  }
+
+  // Scroll to compose box
+  document.getElementById("compose-box").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function renderTasks() {
   const c = document.getElementById("tasks");
   if (!tasks.length) { c.innerHTML = '<p class="empty">No tasks yet</p>'; return; }
   c.innerHTML = tasks.map(t => {
     let h = `<div class="task"><div class="th"><span class="tid">${t.id||"—"}</span><span><span class="st ${t.status}">${t.status}</span>${t.progress?`<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>`:""}<span data-elapsed="${t.id}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span></span></div>`;
+    h += renderTaskInput(t);
     if (t.videoUrl) {
       h += `<video src="${esc(t.videoUrl)}" controls preload="metadata"></video>`;
       h += `<div class="ta"><input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa"><button class="s" onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">Copy</button><a href="${esc(t.videoUrl)}" target="_blank" download class="s">Download</a></div>`;
@@ -1039,31 +1153,59 @@ function escJs(s){return s.replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/
 
 setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const task=tasks.find(t=>t.id===el.dataset.elapsed);if(task&&!task.endTime)el.textContent=elapsed(task)})},1000);
 
-// ── Asset Library Panel ──
-const DEL_PREFIX="__del__";let apGroups=[],apSelGroup=null,apAssets=[],apPoll=null,apNick=localStorage.getItem("assetNick")||"";
-function groupPrefix(){return`[${apNick}] `}
-function displayGroupName(n){return n.replace(groupPrefix(),"")}
-function isMyGroup(g){return g.Name&&g.Name.startsWith(groupPrefix())&&!g.Name.startsWith(DEL_PREFIX)}
-(function initAP(){if(apNick){document.getElementById("i-nick").value=apNick;showAPMain()}})();
-function saveNick(){const v=document.getElementById("i-nick").value.trim();if(!v){alert("Please enter a nickname");return}if(v.length>20){alert("Max 20 characters");return}if(/[\[\]\/]/.test(v)){alert("Cannot contain [ ] /");return}apNick=v;localStorage.setItem("assetNick",v);showAPMain();loadGroups()}
-function clearNick(){apNick="";apGroups=[];apSelGroup=null;apAssets=[];localStorage.removeItem("assetNick");document.getElementById("ap-main").hidden=true;document.getElementById("ap-nick-sec").hidden=false;document.getElementById("ap-assets-sec").hidden=true}
-function showAPMain(){document.getElementById("ap-nick-sec").hidden=true;document.getElementById("ap-main").hidden=false;document.getElementById("ap-nick-display").textContent=apNick}
-async function apCall(action,body){const resp=await fetch(`/api/asset/${action}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const data=await resp.json();if(data.ResponseMetadata?.Error)throw new Error(data.ResponseMetadata.Error.Message||data.ResponseMetadata.Error.Code);if(data.error)throw new Error(data.error);return data.Result||data}
-function toggleAP(){const panel=document.getElementById("ap-panel"),ov=document.getElementById("ap-ov"),opening=!panel.classList.contains("open");panel.classList.toggle("open");ov.classList.toggle("open");if(opening&&apNick&&apGroups.length===0)loadGroups();if(!opening){clearInterval(apPoll);apPoll=null}}
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&document.getElementById("ap-panel").classList.contains("open"))toggleAP()});
-async function loadGroups(){const el=document.getElementById("ap-groups");el.innerHTML='<p class="empty">Loading...</p>';try{const r=await apCall("ListAssetGroups",{Filter:{Name:groupPrefix(),GroupType:"AIGC"},PageNumber:1,PageSize:100});apGroups=(r.Items||[]).filter(isMyGroup);renderGroups()}catch(err){el.innerHTML=`<p class="ap-err">${esc(err.message)}</p>`}}
-function renderGroups(){const el=document.getElementById("ap-groups");if(!apGroups.length){el.innerHTML='<p class="empty">No groups yet. Create one to start.</p>';return}el.innerHTML=apGroups.map(g=>{const sel=apSelGroup===g.Id?" sel":"",name=displayGroupName(g.Name);return`<div class="ap-grp${sel}" onclick="selectGroup('${escJs(g.Id)}')"><div style="font-weight:500;flex:1">${esc(name)}</div><span class="x" onclick="event.stopPropagation();deleteGroup('${escJs(g.Id)}','${escJs(name)}')" title="Delete">&times;</span></div>`}).join("")}
-async function createGroup(){if(!apNick){alert("Set your nickname first");return}const name=prompt("Group name:");if(!name||!name.trim())return;const trimmed=name.trim();if(trimmed.length>40){alert("Max 40 characters");return}const fullName=groupPrefix()+trimmed;if(apGroups.some(g=>g.Name===fullName)){alert("A group with this name already exists");return}try{const r=await apCall("CreateAssetGroup",{Name:fullName,GroupType:"AIGC"});await loadGroups();selectGroup(r.Id)}catch(err){alert("Failed: "+err.message)}}
-async function deleteGroup(gid,displayName){if(!confirm(`Delete group "${displayName}" and all its assets?`))return;try{await apCall("UpdateAssetGroup",{Id:gid,Name:DEL_PREFIX+Date.now()});if(apSelGroup===gid){apSelGroup=null;apAssets=[];document.getElementById("ap-assets-sec").hidden=true}apGroups=apGroups.filter(g=>g.Id!==gid);renderGroups()}catch(err){alert("Delete failed: "+err.message)}}
-async function selectGroup(gid){apSelGroup=gid;renderGroups();document.getElementById("ap-assets-sec").hidden=false;const g=apGroups.find(x=>x.Id===gid);document.getElementById("ap-at").textContent=g?displayGroupName(g.Name):"Assets";await loadAssets()}
-async function loadAssets(){if(!apSelGroup)return;const el=document.getElementById("ap-assets");el.innerHTML='<p class="empty">Loading...</p>';try{const r=await apCall("ListAssets",{Filter:{GroupIds:[apSelGroup],GroupType:"AIGC"},PageNumber:1,PageSize:100,SortBy:"CreateTime",SortOrder:"Desc"});apAssets=(r.Items||[]).filter(a=>!a.Name?.startsWith(DEL_PREFIX));renderAssets();if(apAssets.some(a=>a.Status==="Processing"))startAPPoll()}catch(err){el.innerHTML=`<p class="ap-err">${esc(err.message)}</p>`}}
-function renderAssets(){const el=document.getElementById("ap-assets");if(!apAssets.length){el.innerHTML='<p class="empty">Upload an image to get started</p>';return}el.innerHTML=apAssets.map(a=>{const sc=a.Status==="Active"?"completed":a.Status==="Failed"?"failed":"processing";const name=a.Name||a.Id;let h=`<div class="ap-item"><div class="th"><span class="tid" title="${esc(a.Id)}">${esc(name)}</span><div><span class="st ${sc}">${a.Status}</span><span class="x" onclick="deleteAsset('${escJs(a.Id)}','${escJs(name)}')" title="Delete">&times;</span></div></div>`;if(a.URL&&a.Status==="Active")h+=`<img src="${esc(a.URL)}" loading="lazy">`;if(a.Error?.Message)h+=`<div class="ap-err">${esc(a.Error.Message)}</div>`;if(a.Status==="Active")h+=`<button onclick="useAsset('${escJs(a.Id)}')" style="margin-top:6px;width:100%;font-size:12px">Use in Generation</button>`;return h+"</div>"}).join("")}
-async function deleteAsset(aid,name){if(!confirm(`Delete asset "${name}"?`))return;try{await apCall("UpdateAsset",{Id:aid,Name:DEL_PREFIX+Date.now()});apAssets=apAssets.filter(a=>a.Id!==aid);renderAssets()}catch(err){alert("Delete failed: "+err.message)}}
-async function uploadAssetFile(){if(!apSelGroup){alert("Select a group first");return}const input=document.createElement("input");input.type="file";input.accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif";input.onchange=async()=>{const file=input.files[0];if(!file)return;if(file.size>30*1024*1024){alert("File must be under 30 MB");return}try{const pr=await fetch("/api/cos/presign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:file.name,contentType:file.type})});if(!pr.ok)throw new Error("Failed to get upload URL");const ps=await pr.json();const up=await fetch(ps.uploadUrl,{method:"PUT",headers:{"Content-Type":file.type},body:file});if(!up.ok)throw new Error("COS upload failed");await apCall("CreateAsset",{GroupId:apSelGroup,URL:ps.fileUrl,AssetType:"Image",Name:file.name});await loadAssets()}catch(err){alert("Upload failed: "+err.message)}};input.click()}
-async function addAssetByUrl(){if(!apSelGroup){alert("Select a group first");return}const url=prompt("Image URL (publicly accessible):");if(!url||!url.trim())return;try{await apCall("CreateAsset",{GroupId:apSelGroup,URL:url.trim(),AssetType:"Image"});await loadAssets()}catch(err){alert("Failed: "+err.message)}}
-function useAsset(assetId){const id=++mediaIdCounter;mediaItems.push({id,type:"image",url:`asset://${assetId}`,thumbUrl:"",name:assetId.slice(0,10)+"...",file:null});renderStack();toggleAP()}
-function startAPPoll(){if(apPoll)return;apPoll=setInterval(pollAPAssets,5000)}
-async function pollAPAssets(){const proc=apAssets.filter(a=>a.Status==="Processing");if(!proc.length){clearInterval(apPoll);apPoll=null;return}let changed=false;for(const a of proc){try{const r=await apCall("GetAsset",{Id:a.Id});if(r.Status!==a.Status){Object.assign(a,r);changed=true}}catch(err){console.error("poll asset:",err)}}if(changed)renderAssets()}
+// ── Auto Asset Creation ──
+let cachedGroupId = null;
+let cachedGroupCount = 0;
+
+async function assetCall(action, body) {
+  const key = document.getElementById("i-key").value.trim();
+  const base = document.getElementById("i-base").value.trim();
+  if (!key || !base) throw new Error("API Key and Base URL required");
+  const resp = await fetch(`${base}/volc/asset/${action}`, {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
+    body: JSON.stringify({ ...body, model: "volc-asset" }),
+  });
+  const data = await resp.json();
+  if (data.ResponseMetadata?.Error) throw new Error(data.ResponseMetadata.Error.Message || "Asset API error");
+  return data;
+}
+
+async function ensureAssetGroup() {
+  if (cachedGroupId && cachedGroupCount < 64) return cachedGroupId;
+
+  const prefix = "auto-assets";
+  const list = await assetCall("ListAssetGroups", {
+    Filter: { Name: prefix }, PageNumber: 1, PageSize: 100
+  });
+  const groups = (list.Items || []).filter(g => !g.Name?.startsWith("__del__"));
+
+  for (const g of groups) {
+    const assets = await assetCall("ListAssets", {
+      Filter: { GroupIds: [g.Id] }, PageNumber: 1, PageSize: 1
+    });
+    if ((assets.TotalCount || 0) < 64) {
+      cachedGroupId = g.Id;
+      cachedGroupCount = assets.TotalCount || 0;
+      return g.Id;
+    }
+  }
+
+  const name = prefix + "-" + Date.now();
+  const created = await assetCall("CreateAssetGroup", { Name: name, GroupType: "AIGC" });
+  cachedGroupId = created.Id;
+  cachedGroupCount = 0;
+  return created.Id;
+}
+
+async function createImageAsset(cosUrl, name) {
+  const groupId = await ensureAssetGroup();
+  const result = await assetCall("CreateAsset", {
+    GroupId: groupId, URL: cosUrl, AssetType: "Image", Name: name || "image"
+  });
+  cachedGroupCount++;
+  return result.Id;
+}
 </script>
 </body>
 </html>
