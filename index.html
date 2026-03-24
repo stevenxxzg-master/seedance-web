@@ -6,69 +6,152 @@
 <title>Seedance</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;max-width:800px;margin:0 auto;padding:24px 20px;color:#1a1a1a;font-size:14px;line-height:1.5}
-h1{font-size:16px;font-weight:600;margin-bottom:20px;letter-spacing:.3px}
-hr{border:none;border-top:1px solid #e0e0e0;margin:24px 0}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;max-width:820px;margin:0 auto;padding:24px 20px;color:#1a1a1a;font-size:14px;line-height:1.5;background:#f7f8fa}
+h1{font-size:18px;font-weight:600;margin-bottom:16px}
+hr{border:none;border-top:1px solid #eee;margin:20px 0}
 label{font-size:13px;color:#666;display:block;margin-bottom:3px}
-input[type="text"],input[type="number"],input[type="password"],select,textarea{
-  width:100%;padding:6px 8px;border:1px solid #ddd;font:inherit;background:#fff;border-radius:0
-}
-textarea{resize:vertical;min-height:72px}
-input:focus,select:focus,textarea:focus{outline:none;border-color:#999}
-button{padding:6px 14px;border:1px solid #1a1a1a;background:#1a1a1a;color:#fff;cursor:pointer;font:inherit;border-radius:0}
+input[type="text"],input[type="number"],input[type="password"],select,textarea{width:100%;padding:6px 10px;border:1px solid #e0e0e0;font:inherit;background:#fff;border-radius:8px;font-size:13px}
+textarea{resize:vertical;min-height:60px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#b0b0b0}
+button{padding:6px 14px;border:1px solid #1a1a1a;background:#1a1a1a;color:#fff;cursor:pointer;font:inherit;border-radius:8px}
 button:hover{background:#333}
 button:disabled{opacity:.4;cursor:default}
-button.s{background:#fff;color:#1a1a1a;border-color:#ddd}
+button.s{background:#fff;color:#1a1a1a;border-color:#ddd;border-radius:8px}
 button.s:hover{border-color:#999}
-a.s{display:inline-block;padding:6px 14px;border:1px solid #ddd;background:#fff;color:#1a1a1a;text-decoration:none;text-align:center;font:inherit;cursor:pointer;border-radius:0}
+a.s{display:inline-block;padding:6px 14px;border:1px solid #ddd;background:#fff;color:#1a1a1a;text-decoration:none;text-align:center;font:inherit;cursor:pointer;border-radius:8px}
 a.s:hover{border-color:#999}
-.row{display:flex;gap:12px;margin-bottom:14px}
-.row>.f{flex:1}
-.f{margin-bottom:12px}
-.sl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#aaa;margin-bottom:8px}
-.mi{display:flex;gap:8px;align-items:center;margin-bottom:6px;padding:8px;border:1px solid #e0e0e0}
-.mi input[type="text"]{flex:1;min-width:0}
-.mi select{width:auto}
-.badge{font-size:10px;font-weight:700;padding:2px 6px;background:#f0f0f0;white-space:nowrap;letter-spacing:.3px}
 .x{background:none;border:none;color:#bbb;cursor:pointer;padding:0 4px;font-size:16px;line-height:1}
 .x:hover{color:#cf222e}
-.opts{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px}
-.opts label{margin:0;font-size:13px;color:#1a1a1a;cursor:pointer;display:flex;align-items:center;gap:4px}
-.up-label{cursor:pointer;padding:4px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap;color:#666}
-.up-label:hover{border-color:#999}
-.up-label input{display:none}
-.file-name{font-size:11px;color:#0969da;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.task{padding:12px;border:1px solid #e0e0e0;margin-bottom:8px}
+.empty{color:#aaa;font-size:13px}
+
+/* ── Compose Box ── */
+.compose{background:#fff;border:1px solid #eff0f2;border-radius:12px;margin-bottom:20px;box-shadow:0 1px 6px rgba(0,0,0,.03);overflow:visible;position:relative}
+.compose-body{padding:16px 20px 10px;display:flex;gap:12px;align-items:flex-start;min-height:72px}
+/* Media stack */
+.media-stack{flex-shrink:0;position:relative;min-height:64px;display:flex;align-items:center;gap:6px}
+.media-stack.empty-stack{min-height:auto;gap:0}
+.stack-items{position:relative;width:52px;height:64px;flex-shrink:0}
+.stack-items:hover{width:auto;display:flex;gap:8px;height:auto;align-items:flex-start}
+.stack-item{position:absolute;width:52px;height:64px;border-radius:12px;overflow:hidden;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.14);cursor:pointer;flex-shrink:0;transition:all .25s ease}
+.stack-items:hover .stack-item{position:relative;transform:none!important;left:auto!important;top:auto!important;border-color:#e2e4e8;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.stack-item img,.stack-item video{width:100%;height:100%;object-fit:cover}
+.stack-item .stack-icon{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f2f4f6;font-size:20px;color:#a0aab4}
+.stack-item .stack-dur{position:absolute;bottom:2px;left:2px;font-size:8px;background:rgba(0,0,0,.6);color:#fff;padding:1px 4px;border-radius:3px;font-variant-numeric:tabular-nums}
+.stack-item .stack-remove{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer;font-size:10px;line-height:16px;text-align:center;z-index:5;display:none;padding:0}
+.stack-item:hover .stack-remove{display:block}
+.stack-item .stack-remove:hover{background:#e53e3e}
+.stack-upload{display:none}
+.add-circle{width:52px;height:64px;border-radius:12px;background:#fafbfc;border:1.5px dashed #dde0e4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:18px;color:#b8bcc2;transition:all .15s;position:relative;z-index:6;flex-shrink:0}
+.add-circle:hover{background:#f0f2f5;border-color:#c8ccd0;color:#888}
+.add-circle-wrap{display:flex;flex-direction:column;align-items:center;gap:0;flex-shrink:0}
+.add-circle-label{font-size:9px;color:#b8bcc2;white-space:nowrap;letter-spacing:.3px}
+/* Keyframe mode */
+.kf-area{display:none;flex-shrink:0;align-items:center;gap:8px}
+.kf-area.visible{display:flex}
+.kf-card{width:52px;height:64px;border-radius:12px;background:#fafbfc;border:1.5px dashed #dde0e4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;transition:all .15s;position:relative}
+.kf-card:hover{border-color:#c8ccd0;background:#f0f2f5}
+.kf-card.has-img{padding:0;overflow:hidden;border-style:solid;border-color:#e2e4e8;background:#fafbfc}
+.kf-card.has-img img{width:100%;height:100%;object-fit:cover;border-radius:10px}
+.kf-card .kf-plus{font-size:18px;color:#b8bcc2;font-weight:300;line-height:1}
+.kf-card .kf-label{font-size:9px;color:#b8bcc2}
+.kf-card .kf-remove{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer;font-size:10px;line-height:16px;text-align:center;z-index:5;display:none;padding:0}
+.kf-card:hover .kf-remove{display:block}
+.kf-card .kf-remove:hover{background:#e53e3e}
+.kf-arrow{font-size:16px;color:#c0c4ca;user-select:none}
+/* Prompt area - use contenteditable for inline highlights */
+.compose-prompt{flex:1;padding-top:4px;position:relative}
+.compose-prompt textarea{border:none;padding:0;min-height:44px;font-size:14px;line-height:1.6;resize:none;color:transparent;caret-color:#333;background:transparent;border-radius:0;overflow:hidden;position:relative;z-index:2}
+.compose-prompt textarea::placeholder{color:#b8c0c8}
+.compose-prompt textarea:focus{outline:none}
+.prompt-highlight{position:absolute;top:0;left:0;right:0;padding:0;font-size:14px;line-height:1.6;color:#333;white-space:pre-wrap;word-wrap:break-word;pointer-events:none;z-index:1;font-family:inherit}
+.prompt-highlight .mention{color:#3d9be9;font-weight:500}
+/* Mention popup items */
+.mention-item{padding:8px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .1s}
+.mention-item:hover,.mention-item.active{background:#f0f5ff}
+.mention-item img,.mention-item video{width:36px;height:36px;border-radius:8px;object-fit:cover}
+.mention-item .mi-placeholder{width:36px;height:36px;border-radius:8px;background:#f0f2f5;display:flex;align-items:center;justify-content:center;font-size:14px;color:#aaa}
+.mention-item span{font-size:13px;color:#333}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;align-items:center;gap:8px;padding:10px 20px 12px;border-top:none;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid #eceef0;border-radius:12px;background:#fff;font-size:13px;color:#444;cursor:pointer;white-space:nowrap;transition:all .12s;position:relative;user-select:none;line-height:1.2}
+.pill:hover{border-color:#d8dadd;background:#f9fafb}
+.pill.active{border-color:#d0d2d5;background:#f5f6f8}
+.pill-icon{display:flex;align-items:center;color:#999}
+.pill-icon svg{width:15px;height:15px}
+.pill-chevron{font-size:10px;color:#bbb;margin-left:2px;transition:transform .15s}
+.pill.active .pill-chevron{transform:rotate(180deg)}
+.pill-blue{color:#3d9be9;border-color:#d8ecfb}
+.pill-blue .pill-icon{color:#3d9be9}
+.pill-blue:hover{background:#f0f7fd;border-color:#c8e0f5}
+.send-btn{margin-left:auto;width:36px;height:36px;padding:0;background:#1a1a1a;color:#fff;border:none;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.send-btn:hover{background:#333;transform:scale(1.05)}
+.send-btn:disabled{opacity:.3;cursor:default;transform:none}
+.send-btn svg{width:18px;height:18px}
+.credits{font-size:13px;color:#999;display:flex;align-items:center;gap:3px;margin-left:2px;white-space:nowrap}
+
+/* ── Popups ── */
+.popup{display:none;position:absolute;background:#fff;border:1px solid #eee;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:100;min-width:140px}
+.popup.open{display:block}
+.popup-title{padding:12px 16px 6px;font-size:12px;color:#999;font-weight:500}
+.popup-item{padding:10px 16px;font-size:13px;color:#333;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s}
+.popup-item:hover{background:#f6f8fa}
+.popup-item.selected{font-weight:500}
+.popup-item .check{margin-left:auto;color:#333;font-size:16px}
+.popup-item .pi-icon{width:22px;text-align:center;font-size:15px;color:#666;display:flex;align-items:center;justify-content:center}
+/* Ratio popup */
+.ratio-grid{display:flex;gap:0;padding:10px 12px 14px}
+.ratio-opt{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 6px;cursor:pointer;border-radius:10px;transition:background .1s}
+.ratio-opt:hover{background:#f0f2f5}
+.ratio-opt.selected{background:#f0f2f5;font-weight:600}
+.ratio-opt .ro-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center}
+.ratio-opt .ro-shape{border:1.5px solid #555;border-radius:2px}
+.ratio-opt .ro-label{font-size:11px;color:#555}
+/* Duration popup */
+.dur-popup{max-height:320px;overflow-y:auto;padding-bottom:6px}
+.dur-popup .popup-item{padding:10px 20px}
+.dur-popup .popup-item .pi-icon{font-size:14px}
+/* @ mention popup */
+.mention-popup{min-width:200px}
+
+/* ── Tasks ── */
+.sl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#aaa;margin-bottom:8px}
+.task{padding:14px;border:1px solid #e8eaed;margin-bottom:8px;border-radius:14px;background:#fff}
 .th{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .tid{font-family:ui-monospace,monospace;font-size:12px;color:#555}
-.st{font-size:11px;font-weight:600;padding:1px 6px}
+.st{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px}
 .st.running{color:#0969da;background:#ddf4ff}
 .st.completed{color:#1a7f37;background:#dafbe1}
 .st.failed,.st.cancelled{color:#cf222e;background:#ffebe9}
 .st.submitted,.st.processing{color:#9a6700;background:#fff8c5}
-.task video{max-width:100%;margin-top:8px;display:block;border:1px solid #e0e0e0}
+.task video{max-width:100%;margin-top:8px;display:block;border:1px solid #e0e0e0;border-radius:10px}
 .ta{margin-top:8px;display:flex;gap:8px;align-items:center}
-.rj{margin-top:8px;font-family:ui-monospace,monospace;font-size:11px;background:#f6f8fa;padding:8px;overflow:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;border:1px solid #eee}
+.rj{margin-top:8px;font-family:ui-monospace,monospace;font-size:11px;background:#f6f8fa;padding:8px;overflow:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;border:1px solid #eee;border-radius:8px}
 details summary{font-size:11px;color:#999;cursor:pointer}
-.empty{color:#999;font-size:13px}
-.ma{display:flex;gap:6px;margin-top:10px;margin-bottom:16px}
-.ap-btn{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:16px 7px;background:#1a1a1a;color:#fff;border:none;cursor:pointer;font:inherit;font-size:13px;letter-spacing:4px;z-index:100}
+
+/* ── Settings ── */
+.settings{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.settings .f{margin:0;flex:1;min-width:100px}
+.settings label{font-size:11px;color:#999;margin-bottom:2px}
+.f{margin-bottom:12px}
+
+/* ── Asset Panel ── */
+.ap-btn{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:16px 7px;background:#1a1a1a;color:#fff;border:none;cursor:pointer;font:inherit;font-size:13px;letter-spacing:4px;z-index:100;border-radius:8px 0 0 8px}
 .ap-btn:hover{background:#333}
-.ap-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:200}
+.ap-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:200}
 .ap-ov.open{display:block}
-.ap{position:fixed;right:-420px;top:0;bottom:0;width:400px;background:#fff;border-left:1px solid #e0e0e0;z-index:201;transition:right .2s ease;overflow-y:auto;font-size:13px}
+.ap{position:fixed;right:-420px;top:0;bottom:0;width:400px;background:#fff;border-left:1px solid #e0e0e0;z-index:201;transition:right .25s ease;overflow-y:auto;font-size:13px}
 .ap.open{right:0}
 .ap-hd{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #e0e0e0;position:sticky;top:0;background:#fff;z-index:1}
 .ap-hd h2{font-size:15px;font-weight:600;margin:0}
 .ap-sec{padding:14px 16px;border-bottom:1px solid #f0f0f0}
-.ap-grp{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.ap-grp{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-radius:8px}
 .ap-grp:hover,.ap-grp.sel{border-color:#1a1a1a}
 .ap-grp.sel{background:#f6f8fa}
-.ap-item{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px}
+.ap-item{padding:8px 10px;border:1px solid #e0e0e0;margin-bottom:6px;border-radius:8px}
 .ap-item .tid{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
-.ap-item img{max-width:100%;max-height:80px;display:block;margin:6px 0;object-fit:contain}
+.ap-item img{max-width:100%;max-height:80px;display:block;margin:6px 0;object-fit:contain;border-radius:6px}
 .ap-item .th{display:flex;justify-content:space-between;align-items:center}
-.ap-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .ap-err{font-size:12px;color:#cf222e;margin-top:6px}
 @media(max-width:500px){.ap{width:100%;right:-100%}}
 </style>
@@ -76,63 +159,112 @@ details summary{font-size:11px;color:#999;cursor:pointer}
 <body>
 <h1>Seedance</h1>
 
-<div class="row">
-  <div class="f" style="flex:2"><label>API Key</label>
-    <input type="password" id="i-key" placeholder="sk-...">
+<!-- API Settings -->
+<details style="margin-bottom:14px">
+  <summary style="font-size:12px;color:#aaa;cursor:pointer;margin-bottom:8px">API Settings</summary>
+  <div class="settings">
+    <div class="f" style="flex:2"><label>API Key</label><input type="password" id="i-key" placeholder="sk-..."></div>
+    <div class="f" style="flex:2"><label>Base URL</label><input type="text" id="i-base" placeholder="https://www.example.com"></div>
   </div>
-  <div class="f" style="flex:2"><label>Base URL</label>
-    <input type="text" id="i-base" placeholder="https://www.example.com">
+  <div class="settings">
+    <label style="margin:0"><input type="checkbox" id="i-search"> Web Search</label>
+    <label style="margin:0"><input type="checkbox" id="i-wm"> Watermark</label>
   </div>
-  <div class="f"><label>Model</label>
-    <select id="i-model">
-      <option value="seedance">seedance</option>
-      <option value="seedance-fast">seedance-fast</option>
-    </select>
+</details>
+
+<!-- Compose Box -->
+<div class="compose" id="compose-box">
+  <div class="compose-body">
+    <!-- All-reference mode -->
+    <div class="media-stack empty-stack" id="media-stack">
+      <div class="add-circle-wrap" id="add-wrap">
+        <div class="add-circle" onclick="pickFile()" id="add-btn">
+          <span>+</span>
+          <span class="add-circle-label">参考内容</span>
+        </div>
+      </div>
+    </div>
+    <!-- Keyframe mode -->
+    <div class="kf-area" id="kf-area">
+      <div class="kf-card" id="kf-first" onclick="pickKfFile('first')">
+        <span class="kf-plus">+</span>
+        <span class="kf-label">首帧</span>
+      </div>
+      <span class="kf-arrow">⇌</span>
+      <div class="kf-card" id="kf-last" onclick="pickKfFile('last')">
+        <span class="kf-plus">+</span>
+        <span class="kf-label">尾帧</span>
+      </div>
+    </div>
+    <div class="compose-prompt">
+      <div class="prompt-highlight" id="prompt-highlight"></div>
+      <textarea id="i-prompt" placeholder="描述参考内容，例如：@图片1 模仿 @视频1 的动作，音色参考 @音频1" rows="2"></textarea>
+    </div>
+  </div>
+  <div class="toolbar">
+    <!-- Model -->
+    <div class="pill" onclick="togglePill('model-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+      <span id="model-label">Seedance 2.0</span>
+      <input type="hidden" id="i-model" value="seedance">
+    </div>
+    <!-- Reference mode -->
+    <div class="pill" onclick="togglePill('ref-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span>
+      <span id="ref-label">全能参考</span>
+      <span class="pill-chevron"><svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <input type="hidden" id="i-ref" value="all">
+    </div>
+    <!-- Ratio -->
+    <div class="pill" onclick="togglePill('ratio-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+      <span id="ratio-label">1:1</span>
+      <input type="hidden" id="i-ratio" value="1:1">
+    </div>
+    <!-- Duration -->
+    <div class="pill" onclick="togglePill('dur-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      <span id="dur-label">15s</span>
+      <input type="hidden" id="i-dur" value="15">
+    </div>
+    <!-- @ mention -->
+    <div class="pill" id="at-pill" onclick="togglePill('mention-popup',this)">@</div>
+    <!-- Send -->
+    <button class="send-btn" onclick="generate()" id="gen-btn" title="生成">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    </button>
+  </div>
+
+  <!-- Popups (positioned relative to compose) -->
+  <!-- Model popup -->
+  <div class="popup" id="model-popup">
+    <div class="popup-item" data-value="seedance" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9"/></svg></span> Seedance 2.0 <span class="check" id="chk-seedance">&#x2713;</span></div>
+    <div class="popup-item" data-value="seedance-fast" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Seedance 2.0 Fast <span class="check" id="chk-seedance-fast" style="display:none">&#x2713;</span></div>
+  </div>
+  <!-- Ref mode popup -->
+  <div class="popup" id="ref-popup">
+    <div class="popup-item selected" data-value="all" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span> 全能参考 <span class="check">&#x2713;</span></div>
+    <div class="popup-item" data-value="keyframes" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/></svg></span> 首尾帧 <span class="check" style="display:none">&#x2713;</span></div>
+  </div>
+  <!-- Ratio popup -->
+  <div class="popup" id="ratio-popup" style="min-width:320px">
+    <div class="popup-title">选择比例</div>
+    <div class="ratio-grid" id="ratio-grid"></div>
+  </div>
+  <!-- Duration popup -->
+  <div class="popup dur-popup" id="dur-popup" style="min-width:180px">
+    <div class="popup-title">选择视频生成时长</div>
+  </div>
+  <!-- Mention popup -->
+  <div class="popup mention-popup" id="mention-popup" style="min-width:220px">
+    <div class="popup-title">可能@的内容</div>
+    <div id="mention-list"></div>
   </div>
 </div>
 
-<div class="row">
-  <div class="f"><label>Resolution</label>
-    <select id="i-res">
-      <option value="720p">720p</option>
-      <option value="480p">480p</option>
-    </select>
-  </div>
-  <div class="f"><label>Ratio</label>
-    <select id="i-ratio">
-      <option value="adaptive">adaptive</option>
-      <option value="16:9">16:9</option>
-      <option value="4:3">4:3</option>
-      <option value="1:1">1:1</option>
-      <option value="3:4">3:4</option>
-      <option value="9:16">9:16</option>
-      <option value="21:9">21:9</option>
-    </select>
-  </div>
-  <div class="f"><label>Duration (s)</label>
-    <input type="number" id="i-dur" value="5" min="-1" max="15">
-  </div>
-</div>
-
-<div class="f"><label>Prompt</label>
-  <textarea id="i-prompt" placeholder="描述你想生成的视频内容..."></textarea>
-</div>
-
-<div class="sl">Media</div>
-<div id="media-list"></div>
-<div class="ma">
-  <button class="s" type="button" onclick="addMedia('image')">+ Image</button>
-  <button class="s" type="button" onclick="addMedia('video')">+ Video</button>
-  <button class="s" type="button" onclick="addMedia('audio')">+ Audio</button>
-</div>
-
-<div class="opts">
-  <label><input type="checkbox" id="i-audio" checked> Generate Audio</label>
-  <label><input type="checkbox" id="i-search"> Web Search</label>
-  <label><input type="checkbox" id="i-wm"> Watermark</label>
-</div>
-
-<button onclick="generate()" id="gen-btn" style="width:100%">Generate</button>
+<!-- Resolution (hidden, keep for API) -->
+<input type="hidden" id="i-res" value="720p">
+<input type="hidden" id="i-audio" value="true">
 
 <hr>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -145,7 +277,6 @@ details summary{font-size:11px;color:#999;cursor:pointer}
 <div class="ap-ov" id="ap-ov" onclick="toggleAP()"></div>
 <div class="ap" id="ap-panel">
   <div class="ap-hd"><h2>Asset Library</h2><span class="x" onclick="toggleAP()">&times;</span></div>
-  <!-- Nickname gate -->
   <div class="ap-sec" id="ap-nick-sec">
     <div class="f"><label>Your Nickname</label>
       <div style="display:flex;gap:6px"><input type="text" id="i-nick" placeholder="Enter nickname..." maxlength="20">
@@ -153,7 +284,6 @@ details summary{font-size:11px;color:#999;cursor:pointer}
     </div>
     <p style="font-size:11px;color:#888;margin-top:4px">Used to isolate your assets from other users</p>
   </div>
-  <!-- Main content (hidden until nickname set) -->
   <div id="ap-main" hidden>
     <div class="ap-sec" style="padding:8px 16px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:12px;color:#888" id="ap-nick-display"></span>
@@ -180,127 +310,484 @@ details summary{font-size:11px;color:#999;cursor:pointer}
 </div>
 
 <script>
+// ── State ──
 const MAX_TASKS = 50;
 const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
 let pollTimer = null;
+const mediaItems = []; // { id, type, url, file, thumbUrl, name }
+let mediaIdCounter = 0;
+// Keyframe mode state: { url, thumbUrl, name, file } or null
+let kfFirst = null;
+let kfLast = null;
 
-function saveTasks() {
-  const slim = tasks.slice(0, MAX_TASKS).map(t => ({
-    id: t.id, status: t.status, progress: t.progress,
-    created: t.created, videoUrl: t.videoUrl, endTime: t.endTime,
-    response: t.response,
-  }));
-  localStorage.setItem("tasks", JSON.stringify(slim));
-}
-
-(function init() {
-  // Restore saved form values
-  const fields = {
-    "i-key": "apiKey", "i-base": "apiBase", "i-model": "model",
-    "i-res": "res", "i-ratio": "ratio", "i-dur": "dur", "i-prompt": "prompt",
-  };
-  const checks = { "i-audio": "genAudio", "i-search": "webSearch", "i-wm": "watermark" };
-
-  for (const [id, key] of Object.entries(fields)) {
-    const el = document.getElementById(id);
-    const v = localStorage.getItem(key);
-    if (v !== null) el.value = v;
-    el.addEventListener("input", () => localStorage.setItem(key, el.value));
-  }
-  for (const [id, key] of Object.entries(checks)) {
-    const el = document.getElementById(id);
-    const v = localStorage.getItem(key);
-    if (v !== null) el.checked = v === "true";
-    el.addEventListener("change", () => localStorage.setItem(key, el.checked));
-  }
-
-  renderTasks();
-  if (tasks.some(t => t.id && !["completed","failed","cancelled"].includes(t.status))) startPolling();
-})();
-
-function apiHeaders() {
-  const key = document.getElementById("i-key").value.trim();
-  const base = document.getElementById("i-base").value.trim();
-  const h = { "Content-Type": "application/json" };
-  if (key) h["X-Api-Key"] = key;
-  if (base) h["X-Api-Base"] = base;
-  return h;
-}
-
-const ROLES = {
-  image: [["first_frame","First Frame"],["last_frame","Last Frame"],["reference_image","Reference"]],
-  video: [["reference_video","Reference"]],
-  audio: [["reference_audio","Reference"]]
-};
-const IMAGE_ROLES_REF_ONLY = [["reference_image","Reference"]];
-const BADGE = { image: "IMG", video: "VID", audio: "AUD" };
 const ACCEPT = {
   image: "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif",
   video: "video/mp4,video/quicktime,video/webm",
   audio: "audio/wav,audio/mpeg,audio/mp3"
 };
+const RATIOS = ["21:9","16:9","4:3","1:1","3:4","9:16"];
+const DURATIONS = [5,6,7,8,9,10,11,12,13,14,15];
+const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],"3:4":[18,24],"9:16":[16,28]};
 
-function hasVideoOrAudio() {
-  return document.querySelectorAll('.mi[data-type="video"],.mi[data-type="audio"]').length > 0;
+// ── Init ──
+(function init() {
+  const fields = {"i-key":"apiKey","i-base":"apiBase","i-model":"model","i-ratio":"ratio","i-dur":"dur","i-prompt":"prompt","i-res":"res"};
+  const checks = {"i-search":"webSearch","i-wm":"watermark"};
+  for (const [id,key] of Object.entries(fields)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const v = localStorage.getItem(key);
+    if (v !== null) el.value = v;
+    el.addEventListener("input", () => localStorage.setItem(key, el.value));
+  }
+  for (const [id,key] of Object.entries(checks)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const v = localStorage.getItem(key);
+    if (v !== null) el.checked = v === "true";
+    el.addEventListener("change", () => localStorage.setItem(key, el.checked));
+  }
+  // Sync hidden audio checkbox
+  const audioEl = document.getElementById("i-audio");
+  const av = localStorage.getItem("genAudio");
+  if (av !== null) audioEl.value = av;
+
+  // Restore model label
+  const m = document.getElementById("i-model").value;
+  document.getElementById("model-label").textContent = m === "seedance-fast" ? "Seedance 2.0 Fast" : "Seedance 2.0";
+  document.getElementById("chk-seedance").style.display = m === "seedance" ? "" : "none";
+  document.getElementById("chk-seedance-fast").style.display = m === "seedance-fast" ? "" : "none";
+
+  // Restore ratio label
+  const r = document.getElementById("i-ratio").value || "1:1";
+  document.getElementById("ratio-label").textContent = r;
+
+  // Restore duration label
+  const d = document.getElementById("i-dur").value || "15";
+  document.getElementById("dur-label").textContent = d + "s";
+
+  // Build ratio grid
+  buildRatioGrid();
+  // Build duration list
+  buildDurList();
+
+  // Setup textarea events
+  const ta = document.getElementById("i-prompt");
+  ta.addEventListener("input", onPromptInput);
+  ta.addEventListener("scroll", () => {
+    document.getElementById("prompt-highlight").scrollTop = ta.scrollTop;
+  });
+  ta.addEventListener("keydown", onPromptKeydown);
+
+  renderTasks();
+  if (tasks.some(t => t.id && !["completed","failed","cancelled"].includes(t.status))) startPolling();
+})();
+
+function buildRatioGrid() {
+  const cur = document.getElementById("i-ratio").value;
+  const g = document.getElementById("ratio-grid");
+  g.innerHTML = RATIOS.map(r => {
+    const [w,h] = RATIO_SHAPES[r];
+    const sel = r === cur ? " selected" : "";
+    return `<div class="ratio-opt${sel}" onclick="selectRatio('${r}')">
+      <div class="ro-icon"><div class="ro-shape" style="width:${w}px;height:${h}px"></div></div>
+      <div class="ro-label">${r}</div>
+    </div>`;
+  }).join("");
 }
 
-function syncImageRoles() {
-  const refOnly = hasVideoOrAudio();
-  for (const item of document.querySelectorAll('.mi[data-type="image"]')) {
-    const sel = item.querySelector(".mr");
-    const cur = sel.value;
-    const opts = refOnly ? IMAGE_ROLES_REF_ONLY : ROLES.image;
-    sel.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
-    if (opts.some(([v]) => v === cur)) sel.value = cur;
-    else sel.value = opts[0][0];
+function buildDurList() {
+  const cur = parseInt(document.getElementById("i-dur").value);
+  const p = document.getElementById("dur-popup");
+  const title = p.querySelector(".popup-title").outerHTML;
+  p.innerHTML = title + DURATIONS.map(d => {
+    const sel = d === cur ? " selected" : "";
+    return `<div class="popup-item${sel}" onclick="selectDur(${d})">
+      <span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      ${d}s
+      ${d === cur ? '<span class="check">&#x2713;</span>' : ''}
+    </div>`;
+  }).join("");
+}
+
+// ── Popup management ──
+let openPopup = null;
+let openPill = null;
+
+function closeAllPopups() {
+  document.querySelectorAll(".popup.open").forEach(p => p.classList.remove("open"));
+  document.querySelectorAll(".pill.active").forEach(p => p.classList.remove("active"));
+  openPopup = null;
+  openPill = null;
+}
+
+function togglePill(popupId, pillEl) {
+  const popup = document.getElementById(popupId);
+  if (openPopup === popup) { closeAllPopups(); return; }
+  closeAllPopups();
+
+  // Position popup above the pill
+  if (pillEl) {
+    const compose = document.getElementById("compose-box");
+    const composeRect = compose.getBoundingClientRect();
+    const pillRect = pillEl.getBoundingClientRect();
+    const pillLeft = pillRect.left - composeRect.left;
+    const pillCenter = pillLeft + pillRect.width / 2;
+
+    popup.style.left = "";
+    popup.style.right = "";
+    popup.style.bottom = "";
+
+    // Show temporarily to measure
+    popup.style.visibility = "hidden";
+    popup.classList.add("open");
+    const popupW = popup.offsetWidth;
+    popup.classList.remove("open");
+    popup.style.visibility = "";
+
+    // Center popup on pill, clamp to compose bounds
+    let left = pillCenter - popupW / 2;
+    left = Math.max(8, Math.min(left, composeRect.width - popupW - 8));
+    popup.style.left = left + "px";
+    // Duration popup opens downward, others open upward
+    if (popupId === "dur-popup") {
+      popup.style.bottom = "";
+      popup.style.top = (pillRect.bottom - composeRect.top + 6) + "px";
+    } else {
+      popup.style.top = "";
+      popup.style.bottom = (composeRect.height - pillRect.top + composeRect.top + 6) + "px";
+    }
+
+    pillEl.classList.add("active");
+  }
+
+  popup.classList.add("open");
+  openPopup = popup;
+  openPill = pillEl;
+  if (popupId === "mention-popup") buildMentionList();
+}
+
+document.addEventListener("click", (e) => {
+  if (openPopup && !openPopup.contains(e.target) && (!openPill || !openPill.contains(e.target))) {
+    closeAllPopups();
+  }
+});
+
+function selectModel(el) {
+  const v = el.dataset.value;
+  document.getElementById("i-model").value = v;
+  localStorage.setItem("model", v);
+  document.getElementById("model-label").textContent = v === "seedance-fast" ? "Seedance 2.0 Fast" : "Seedance 2.0";
+  document.getElementById("chk-seedance").style.display = v === "seedance" ? "" : "none";
+  document.getElementById("chk-seedance-fast").style.display = v === "seedance-fast" ? "" : "none";
+  closeAllPopups();
+}
+
+function selectRef(el) {
+  const v = el.dataset.value;
+  document.getElementById("i-ref").value = v;
+  const labels = { all:"全能参考", keyframes:"首尾帧" };
+  document.getElementById("ref-label").textContent = labels[v] || v;
+  document.querySelectorAll("#ref-popup .popup-item").forEach(item => {
+    item.classList.toggle("selected", item.dataset.value === v);
+    item.querySelector(".check").style.display = item.dataset.value === v ? "" : "none";
+  });
+  closeAllPopups();
+  syncRefMode();
+}
+
+function syncRefMode() {
+  const v = document.getElementById("i-ref").value;
+  const isKf = v === "keyframes";
+  document.getElementById("media-stack").style.display = isKf ? "none" : "";
+  document.getElementById("kf-area").classList.toggle("visible", isKf);
+  document.getElementById("i-prompt").placeholder = isKf
+    ? "输入文字，描述你想创作的画面内容、运动方式等。例如：一个3D形象的小男孩，在公园滑滑板。"
+    : "描述参考内容，例如：@图片1 模仿 @视频1 的动作，音色参考 @音频1";
+  document.getElementById("at-pill").style.display = isKf ? "none" : "";
+}
+
+function selectRatio(r) {
+  document.getElementById("i-ratio").value = r;
+  localStorage.setItem("ratio", r);
+  document.getElementById("ratio-label").textContent = r;
+  buildRatioGrid();
+  closeAllPopups();
+}
+
+function selectDur(d) {
+  document.getElementById("i-dur").value = d;
+  localStorage.setItem("dur", String(d));
+  document.getElementById("dur-label").textContent = d + "s";
+  buildDurList();
+  closeAllPopups();
+}
+
+function buildMentionList() {
+  const el = document.getElementById("mention-list");
+  if (mediaItems.length === 0) {
+    el.innerHTML = '<div style="padding:10px 16px;color:#aaa;font-size:12px">暂无参考内容</div>';
+    return;
+  }
+  mentionIdx = 0;
+  el.innerHTML = mediaItems.map((m, i) => {
+    const typeLabel = m.type === "image" ? "图片" : m.type === "video" ? "视频" : "音频";
+    const num = mediaItems.filter((x, j) => x.type === m.type && j <= i).length;
+    let thumb = '';
+    if (m.thumbUrl) {
+      thumb = `<img src="${esc(m.thumbUrl)}" width="36" height="36" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block">`;
+    } else {
+      const icons = { image: "🖼", video: "🎬", audio: "🎵" };
+      thumb = `<div class="mi-placeholder">${icons[m.type]}</div>`;
+    }
+    const active = i === 0 ? " active" : "";
+    return `<div class="mention-item${active}" onclick="insertMention('${typeLabel}${num}')">
+      ${thumb}<span>${typeLabel}${num}</span>
+    </div>`;
+  }).join("");
+}
+
+function showMentionAtCursor() {
+  const popup = document.getElementById("mention-popup");
+  const compose = document.getElementById("compose-box");
+  const ta = document.getElementById("i-prompt");
+  const composeRect = compose.getBoundingClientRect();
+  const taRect = ta.getBoundingClientRect();
+
+  buildMentionList();
+  closeAllPopups();
+
+  // Position near the textarea
+  popup.style.left = (taRect.left - composeRect.left) + "px";
+  popup.style.bottom = "";
+  popup.style.top = (taRect.bottom - composeRect.top + 4) + "px";
+
+  popup.classList.add("open");
+  openPopup = popup;
+  openPill = null;
+}
+
+function insertMention(text) {
+  const ta = document.getElementById("i-prompt");
+  const pos = ta.selectionStart;
+  const v = ta.value;
+  const before = v.slice(0, pos);
+  const atIdx = before.lastIndexOf("@");
+  const start = (atIdx >= 0 && atIdx >= pos - 1) ? atIdx : pos;
+  const insert = "@" + text + " ";
+  ta.value = v.slice(0, start) + insert + v.slice(pos);
+  ta.selectionStart = ta.selectionEnd = start + insert.length;
+  closeAllPopups();
+  // Force immediate update
+  updateHighlight();
+  autoResize();
+  ta.focus();
+}
+
+// ── Prompt helpers (global) ──
+let mentionIdx = 0;
+
+function autoResize() {
+  const ta = document.getElementById("i-prompt");
+  ta.style.height = "auto";
+  ta.style.height = ta.scrollHeight + "px";
+}
+
+function updateHighlight() {
+  const ta = document.getElementById("i-prompt");
+  const hl = document.getElementById("prompt-highlight");
+  const val = ta.value;
+  if (!val) { hl.innerHTML = ""; return; }
+  // Match @图片1, @视频2, @音频1 etc - with or without trailing content
+  hl.innerHTML = esc(val).replace(/@(图片|视频|音频)\d+/g, '<span class="mention">$&</span>') + '\n';
+}
+
+function onPromptInput() {
+  autoResize();
+  updateHighlight();
+  const ta = document.getElementById("i-prompt");
+  const pos = ta.selectionStart;
+  if (pos > 0 && ta.value[pos - 1] === "@") {
+    if (mediaItems.length > 0) {
+      mentionIdx = 0;
+      showMentionAtCursor();
+    }
+  } else if (openPopup === document.getElementById("mention-popup")) {
+    closeAllPopups();
   }
 }
 
-function removeMedia(btn) {
-  btn.parentElement.remove();
-  syncImageRoles();
+function onPromptKeydown(e) {
+  const popup = document.getElementById("mention-popup");
+  if (!popup.classList.contains("open")) return;
+  const items = popup.querySelectorAll(".mention-item");
+  if (!items.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    mentionIdx = (mentionIdx + 1) % items.length;
+    highlightMentionItem(items);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    mentionIdx = (mentionIdx - 1 + items.length) % items.length;
+    highlightMentionItem(items);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (items[mentionIdx]) items[mentionIdx].click();
+  } else if (e.key === "Escape") {
+    closeAllPopups();
+  }
 }
 
+function highlightMentionItem(items) {
+  items.forEach((el, i) => el.classList.toggle("active", i === mentionIdx));
+}
+
+// ── Media management ──
+const ALL_ACCEPT = [ACCEPT.image, ACCEPT.video, ACCEPT.audio].join(",");
+
+function detectFileType(file) {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  // Fallback: check extension
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (["jpg","jpeg","png","webp","bmp","tiff","gif"].includes(ext)) return "image";
+  if (["mp4","mov","webm","avi","mkv"].includes(ext)) return "video";
+  if (["wav","mp3","aac","ogg","flac","m4a"].includes(ext)) return "audio";
+  return "image"; // default
+}
+
+function pickFile() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ALL_ACCEPT;
+  input.multiple = true;
+  input.onchange = () => {
+    for (const file of input.files) {
+      const type = detectFileType(file);
+      const id = ++mediaIdCounter;
+      // Create local preview URL immediately
+      const thumbUrl = (type === "image" || type === "video") ? URL.createObjectURL(file) : "";
+      const item = { id, type, url: "", thumbUrl, name: file.name, file };
+      mediaItems.push(item);
+      handleFileForItem(id, file);
+    }
+    renderStack();
+  };
+  input.click();
+}
+
+// Keep addMedia for asset library usage
 function addMedia(type) {
-  const el = document.createElement("div");
-  el.className = "mi";
-  el.dataset.type = type;
-
-  let h = `<span class="badge">${BADGE[type]}</span>`;
-  h += `<input type="text" placeholder="URL" class="mu">`;
-  h += `<label class="up-label">Upload<input type="file" accept="${ACCEPT[type]}" onchange="handleFile(this)"></label>`;
-  h += `<span class="file-name" hidden></span>`;
-
-  // For image, roles depend on whether video/audio exists
-  const roles = type === "image" && hasVideoOrAudio() ? IMAGE_ROLES_REF_ONLY : ROLES[type];
-  h += `<select class="mr">`;
-  for (const [v, l] of roles) h += `<option value="${v}">${l}</option>`;
-  h += `</select>`;
-  h += `<span class="x" onclick="removeMedia(this)">&times;</span>`;
-
-  el.innerHTML = h;
-  document.getElementById("media-list").appendChild(el);
-  syncImageRoles();
+  const id = ++mediaIdCounter;
+  const item = { id, type, url: "", thumbUrl: "", name: "", file: null };
+  mediaItems.push(item);
+  renderStack();
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ACCEPT[type];
+  input.onchange = () => handleFileForItem(id, input.files[0]);
+  input.click();
 }
 
-async function handleFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const item = input.closest(".mi");
-  const urlInput = item.querySelector(".mu");
-  const nameSpan = item.querySelector(".file-name");
-  const uploadLabel = item.querySelector(".up-label");
-  const isVideo = item.dataset.type === "video";
+function removeMediaItem(id) {
+  const idx = mediaItems.findIndex(m => m.id === id);
+  if (idx >= 0) mediaItems.splice(idx, 1);
+  renderStack();
+}
 
-  const origText = uploadLabel.childNodes[0].textContent;
-  uploadLabel.childNodes[0].textContent = isVideo ? "Processing..." : "Uploading...";
-  input.disabled = true;
+function renderStack() {
+  const container = document.getElementById("media-stack");
+  const addWrap = document.getElementById("add-wrap");
+
+  // Remove old stack-items if exists
+  const old = document.getElementById("stack-items");
+  if (old) old.remove();
+
+  const n = mediaItems.length;
+  if (n === 0) {
+    container.classList.add("empty-stack");
+    return;
+  }
+
+  container.classList.remove("empty-stack");
+
+  // Create stack-items container
+  const stackItems = document.createElement("div");
+  stackItems.className = "stack-items";
+  stackItems.id = "stack-items";
+  container.insertBefore(stackItems, addWrap);
+
+  // Calculate stacked positions
+  const rotations = n === 1 ? [0] : n === 2 ? [-6, 5] : n === 3 ? [-8, 0, 7] : generateRotations(n);
+
+  mediaItems.forEach((item, i) => {
+    const div = document.createElement("div");
+    div.className = "stack-item";
+    div.style.zIndex = i + 1;
+    div.style.transform = `rotate(${rotations[i] || 0}deg)`;
+    // Slight offset for stacking depth
+    const offsetX = (i - (n - 1) / 2) * 4;
+    const offsetY = (n - 1 - i) * 2;
+    div.style.left = offsetX + "px";
+    div.style.top = offsetY + "px";
+
+    let inner = "";
+    if (item.thumbUrl && item.type === "image") {
+      inner = `<img src="${esc(item.thumbUrl)}">`;
+    } else if (item.thumbUrl && item.type === "video") {
+      inner = `<video src="${esc(item.thumbUrl)}" muted></video>`;
+    } else {
+      const icons = { image: "🖼", video: "🎬", audio: "🎵" };
+      inner = `<div class="stack-icon">${icons[item.type]}</div>`;
+    }
+    if (item.type === "video" && item.url) {
+      inner += `<span class="stack-dur">00:${String(parseInt(document.getElementById("i-dur").value)||15).padStart(2,"0")}</span>`;
+    }
+    inner += `<button class="stack-remove" onclick="event.stopPropagation();removeMediaItem(${item.id})">&times;</button>`;
+    div.innerHTML = inner;
+    div.onclick = () => triggerReupload(item.id);
+    stackItems.appendChild(div);
+  });
+}
+
+function generateRotations(n) {
+  const r = [];
+  for (let i = 0; i < n; i++) r.push(-10 + (20 / (n - 1)) * i);
+  return r;
+}
+function generateOffsets(n) {
+  const o = [];
+  for (let i = 0; i < n; i++) o.push([-8 + (16 / (n - 1)) * i, 6 - (12 / (n - 1)) * i]);
+  return o;
+}
+
+function triggerReupload(id) {
+  const item = mediaItems.find(m => m.id === id);
+  if (!item) return;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ACCEPT[item.type];
+  input.onchange = () => handleFileForItem(id, input.files[0]);
+  input.click();
+}
+
+async function handleFileForItem(id, file) {
+  if (!file) return;
+  const item = mediaItems.find(m => m.id === id);
+  if (!item) return;
+  item.name = file.name;
+  item.file = file;
+
+  // Local preview
+  if (item.type === "image" || item.type === "video") {
+    item.thumbUrl = URL.createObjectURL(file);
+  }
+  renderStack();
 
   try {
     let fileUrl;
-
-    if (isVideo) {
-      // Video goes through server for compression
+    if (item.type === "video") {
       const form = new FormData();
       form.append("file", file);
       const resp = await fetch("/api/upload/video", { method: "POST", body: form });
@@ -310,7 +797,6 @@ async function handleFile(input) {
       }
       ({ fileUrl } = await resp.json());
     } else {
-      // Image/audio upload directly to COS via presign
       const presignResp = await fetch("/api/cos/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -319,7 +805,6 @@ async function handleFile(input) {
       if (!presignResp.ok) throw new Error("Failed to get upload URL");
       const presign = await presignResp.json();
       fileUrl = presign.fileUrl;
-
       const uploadResp = await fetch(presign.uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": file.type },
@@ -327,18 +812,81 @@ async function handleFile(input) {
       });
       if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     }
-
-    urlInput.value = fileUrl;
-    urlInput.disabled = true;
-    urlInput.placeholder = file.name;
-    if (nameSpan) { nameSpan.textContent = file.name; nameSpan.hidden = false; }
+    item.url = fileUrl;
+    if (item.type === "video") item.thumbUrl = fileUrl;
+    renderStack();
   } catch (err) {
-    alert("Upload failed: " + err.message);
-    input.value = "";
-  } finally {
-    uploadLabel.childNodes[0].textContent = origText;
-    input.disabled = false;
+    alert("上传失败: " + err.message);
+    removeMediaItem(id);
   }
+}
+
+// ── Keyframe mode ──
+function pickKfFile(which) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ACCEPT.image;
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    const thumbUrl = URL.createObjectURL(file);
+    const obj = { url: "", thumbUrl, name: file.name, file };
+    if (which === "first") kfFirst = obj; else kfLast = obj;
+    renderKfCard(which);
+    uploadKfFile(which, file);
+  };
+  input.click();
+}
+
+function removeKf(which, e) {
+  e.stopPropagation();
+  if (which === "first") kfFirst = null; else kfLast = null;
+  renderKfCard(which);
+}
+
+function renderKfCard(which) {
+  const card = document.getElementById(which === "first" ? "kf-first" : "kf-last");
+  const obj = which === "first" ? kfFirst : kfLast;
+  const label = which === "first" ? "首帧" : "尾帧";
+  if (obj && obj.thumbUrl) {
+    card.className = "kf-card has-img";
+    card.innerHTML = `<img src="${esc(obj.thumbUrl)}"><button class="kf-remove" onclick="removeKf('${which}',event)">&times;</button>`;
+  } else {
+    card.className = "kf-card";
+    card.innerHTML = `<span class="kf-plus">+</span><span class="kf-label">${label}</span>`;
+  }
+}
+
+async function uploadKfFile(which, file) {
+  const obj = which === "first" ? kfFirst : kfLast;
+  if (!obj) return;
+  try {
+    const presignResp = await fetch("/api/cos/presign", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: file.name, contentType: file.type }),
+    });
+    if (!presignResp.ok) throw new Error("Failed to get upload URL");
+    const presign = await presignResp.json();
+    const uploadResp = await fetch(presign.uploadUrl, {
+      method: "PUT", headers: { "Content-Type": file.type }, body: file,
+    });
+    if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+    obj.url = presign.fileUrl;
+  } catch (err) {
+    alert("上传失败: " + err.message);
+    if (which === "first") kfFirst = null; else kfLast = null;
+    renderKfCard(which);
+  }
+}
+
+// ── Build request ──
+function apiHeaders() {
+  const key = document.getElementById("i-key").value.trim();
+  const base = document.getElementById("i-base").value.trim();
+  const h = { "Content-Type": "application/json" };
+  if (key) h["X-Api-Key"] = key;
+  if (base) h["X-Api-Base"] = base;
+  return h;
 }
 
 function buildRequest() {
@@ -346,15 +894,28 @@ function buildRequest() {
   const prompt = document.getElementById("i-prompt").value.trim();
   if (prompt) content.push({ type: "text", text: prompt });
 
-  for (const item of document.querySelectorAll(".mi")) {
-    const type = item.dataset.type;
-    const url = item.querySelector(".mu").value.trim();
-    const role = item.querySelector(".mr").value;
-    if (!url) continue;
+  const refMode = document.getElementById("i-ref").value;
 
-    if (type === "image") content.push({ type: "image_url", image_url: { url }, role });
-    else if (type === "video") content.push({ type: "video_url", video_url: { url }, role });
-    else if (type === "audio") content.push({ type: "audio_url", audio_url: { url }, role });
+  if (refMode === "keyframes") {
+    // Keyframe mode: use kfFirst / kfLast
+    if (kfFirst && kfFirst.url) {
+      content.push({ type: "image_url", image_url: { url: kfFirst.url }, role: "first_frame" });
+    }
+    if (kfLast && kfLast.url) {
+      content.push({ type: "image_url", image_url: { url: kfLast.url }, role: "last_frame" });
+    }
+  } else {
+    // All-reference mode: use mediaItems stack
+    for (const item of mediaItems) {
+      if (!item.url) continue;
+      if (item.type === "image") {
+        content.push({ type: "image_url", image_url: { url: item.url }, role: "reference_image" });
+      } else if (item.type === "video") {
+        content.push({ type: "video_url", video_url: { url: item.url }, role: "reference_video" });
+      } else if (item.type === "audio") {
+        content.push({ type: "audio_url", audio_url: { url: item.url }, role: "reference_audio" });
+      }
+    }
   }
 
   const body = {
@@ -363,445 +924,134 @@ function buildRequest() {
     resolution: document.getElementById("i-res").value,
     ratio: document.getElementById("i-ratio").value,
     duration: parseInt(document.getElementById("i-dur").value, 10),
-    generate_audio: document.getElementById("i-audio").checked,
-    watermark: document.getElementById("i-wm").checked,
+    generate_audio: true,
+    watermark: document.getElementById("i-wm")?.checked || false,
   };
-
-  if (document.getElementById("i-search").checked) {
+  if (document.getElementById("i-search")?.checked) {
     body.tools = [{ type: "web_search" }];
   }
   return body;
 }
 
+// ── Generate ──
 async function generate() {
   const btn = document.getElementById("gen-btn");
   btn.disabled = true;
-  btn.textContent = "Submitting...";
-
   try {
     const body = buildRequest();
     if (body.content.length === 0) { alert("请至少提供一个 Prompt 或媒体输入"); return; }
-
-    const resp = await fetch("/api/generate", {
-      method: "POST",
-      headers: apiHeaders(),
-      body: JSON.stringify(body),
-    });
+    const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(body) });
     const data = await resp.json();
-
     if (!resp.ok || (data.code && data.code !== "success")) {
-      const msg = data.error?.message || data.message || data.error || JSON.stringify(data);
-      alert("Error: " + msg);
+      alert("Error: " + (data.error?.message || data.message || data.error || JSON.stringify(data)));
       return;
     }
-
     const parsed = parseResponse(data);
-    tasks.unshift({
-      id: parsed.id,
-      status: parsed.status,
-      progress: parsed.progress,
-      created: Date.now(),
-      response: data,
-      videoUrl: parsed.videoUrl,
-      pollErrors: 0,
-    });
-    saveTasks();
-    renderTasks();
+    tasks.unshift({ id: parsed.id, status: parsed.status, progress: parsed.progress, created: Date.now(), response: data, videoUrl: parsed.videoUrl, pollErrors: 0 });
+    saveTasks(); renderTasks();
     if (parsed.id) startPolling();
-  } catch (err) {
-    alert("Request failed: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Generate";
-  }
+  } catch (err) { alert("Request failed: " + err.message); }
+  finally { btn.disabled = false; }
 }
 
-function startPolling() {
-  if (pollTimer) return;
-  pollTimer = setInterval(pollAll, 15000);
+// ── Task management ──
+function saveTasks() {
+  const slim = tasks.slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response }));
+  localStorage.setItem("tasks", JSON.stringify(slim));
 }
+
+function startPolling() { if (pollTimer) return; pollTimer = setInterval(pollAll, 15000); }
 
 async function pollAll() {
   const TERMINAL = ["completed","failed","cancelled"];
   const running = tasks.filter(t => t.id && !TERMINAL.includes(t.status));
   if (running.length === 0) { clearInterval(pollTimer); pollTimer = null; saveTasks(); renderTasks(); return; }
-
   let changed = false;
   for (const task of running) {
     try {
       const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
       const data = await resp.json();
       task.response = data;
-
       if (resp.ok && data.code !== "fail_to_fetch_task") {
         const parsed = parseResponse(data);
         if (task.status !== parsed.status || task.progress !== parsed.progress || (!task.videoUrl && parsed.videoUrl)) changed = true;
-        task.status = parsed.status;
-        task.progress = parsed.progress;
+        task.status = parsed.status; task.progress = parsed.progress;
         if (!task.videoUrl) task.videoUrl = parsed.videoUrl;
         task.pollErrors = 0;
         if (TERMINAL.includes(task.status) && !task.endTime) task.endTime = Date.now();
       } else {
-        task.pollErrors = (task.pollErrors || 0) + 1;
-        if (task.pollErrors >= 5) { task.status = "failed"; task.endTime = Date.now(); changed = true; }
+        task.pollErrors = (task.pollErrors||0)+1;
+        if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
       }
-    } catch (e) {
-      console.error(`poll ${task.id}:`, e);
-      task.pollErrors = (task.pollErrors || 0) + 1;
-      if (task.pollErrors >= 5) { task.status = "failed"; task.endTime = Date.now(); changed = true; }
+    } catch(e) {
+      task.pollErrors = (task.pollErrors||0)+1;
+      if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
     }
   }
   saveTasks();
   if (changed) renderTasks();
 }
 
-const STATUS_MAP = {
-  "IN_PROGRESS": "running", "SUCCESS": "completed", "FAILED": "failed",
-  "CANCELLED": "cancelled", "running": "running", "completed": "completed",
-  "failed": "failed", "cancelled": "cancelled", "submitted": "submitted",
-};
+const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"failed","CANCELLED":"cancelled","running":"running","completed":"completed","failed":"failed","cancelled":"cancelled","submitted":"submitted"};
 
 function parseResponse(raw) {
-  const wrap = raw.data || raw;
-  const inner = wrap.data || wrap;
-  const id = wrap.task_id || inner.id || raw.id;
-  const rawStatus = wrap.status || inner.status || raw.status || "submitted";
-  const status = STATUS_MAP[rawStatus] || rawStatus.toLowerCase();
-  const progress = wrap.progress || null;
-  const videoUrl = findVideoUrl(raw);
-  return { id, status, progress, videoUrl };
+  const wrap = raw.data||raw; const inner = wrap.data||wrap;
+  return { id: wrap.task_id||inner.id||raw.id, status: STATUS_MAP[wrap.status||inner.status||raw.status||"submitted"]||(wrap.status||"submitted").toLowerCase(), progress: wrap.progress||null, videoUrl: findVideoUrl(raw) };
 }
 
 function findVideoUrl(d) {
-  if (d.video?.url) return d.video.url;
-  if (d.video_result?.[0]?.url) return d.video_result[0].url;
-  if (d.output?.video_url) return d.output.video_url;
-  const s = JSON.stringify(d);
-  const m = s.match(/(https?:\/\/[^"\\]+\.mp4[^"\\]*)/);
-  return m ? m[1] : null;
+  if(d.video?.url)return d.video.url; if(d.video_result?.[0]?.url)return d.video_result[0].url; if(d.output?.video_url)return d.output.video_url;
+  const m=JSON.stringify(d).match(/(https?:\/\/[^"\\]+\.mp4[^"\\]*)/); return m?m[1]:null;
 }
 
-function fmtTime(ms) {
-  if (ms < 0) ms = 0;
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
-}
-
-function elapsed(t) {
-  const end = t.endTime || Date.now();
-  return fmtTime(end - t.created);
-}
+function fmtTime(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000),m=Math.floor(s/60);return m>0?`${m}m ${s%60}s`:`${s}s`}
+function elapsed(t){return fmtTime((t.endTime||Date.now())-t.created)}
 
 function renderTasks() {
   const c = document.getElementById("tasks");
-  if (tasks.length === 0) { c.innerHTML = '<p class="empty">No tasks yet</p>'; return; }
-
+  if (!tasks.length) { c.innerHTML = '<p class="empty">No tasks yet</p>'; return; }
   c.innerHTML = tasks.map(t => {
-    let h = `<div class="task"><div class="th">
-      <span class="tid">${t.id || "—"}</span>
-      <span><span class="st ${t.status}">${t.status}</span>${t.progress ? `<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>` : ""}
-      <span data-elapsed="${t.id}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span></span>
-    </div>`;
-
+    let h = `<div class="task"><div class="th"><span class="tid">${t.id||"—"}</span><span><span class="st ${t.status}">${t.status}</span>${t.progress?`<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>`:""}<span data-elapsed="${t.id}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span></span></div>`;
     if (t.videoUrl) {
       h += `<video src="${esc(t.videoUrl)}" controls preload="metadata"></video>`;
-      h += `<div class="ta">
-        <input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa">
-        <button class="s" onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">Copy URL</button>
-        <a href="${esc(t.videoUrl)}" target="_blank" download class="s">Download</a>
-      </div>`;
+      h += `<div class="ta"><input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa"><button class="s" onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">Copy</button><a href="${esc(t.videoUrl)}" target="_blank" download class="s">Download</a></div>`;
     }
-
-    h += `<details style="margin-top:8px"><summary>Response JSON</summary>
-      <div class="rj">${esc(JSON.stringify(t.response, null, 2))}</div></details>`;
+    h += `<details style="margin-top:8px"><summary>Response JSON</summary><div class="rj">${esc(JSON.stringify(t.response,null,2))}</div></details>`;
     return h + "</div>";
   }).join("");
 }
 
-function clearTasks() {
-  if (!confirm("Clear all task history?")) return;
-  tasks.length = 0;
-  saveTasks();
-  renderTasks();
-}
+function clearTasks(){if(!confirm("Clear all task history?"))return;tasks.length=0;saveTasks();renderTasks()}
+function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function escJs(s){return s.replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"')}
 
-function esc(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-function escJs(s) {
-  return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"');
-}
-
-setInterval(() => {
-  document.querySelectorAll("[data-elapsed]").forEach(el => {
-    const task = tasks.find(t => t.id === el.dataset.elapsed);
-    if (task && !task.endTime) el.textContent = elapsed(task);
-  });
-}, 1000);
+setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const task=tasks.find(t=>t.id===el.dataset.elapsed);if(task&&!task.endTime)el.textContent=elapsed(task)})},1000);
 
 // ── Asset Library Panel ──
-const DEL_PREFIX = "__del__";
-let apGroups = [];
-let apSelGroup = null;
-let apAssets = [];
-let apPoll = null;
-let apNick = localStorage.getItem("assetNick") || "";
-
-function groupPrefix() { return `[${apNick}] `; }
-function displayGroupName(fullName) { return fullName.replace(groupPrefix(), ""); }
-function isMyGroup(g) { return g.Name && g.Name.startsWith(groupPrefix()) && !g.Name.startsWith(DEL_PREFIX); }
-
-(function initAP() {
-  if (apNick) {
-    document.getElementById("i-nick").value = apNick;
-    showAPMain();
-  }
-})();
-
-function saveNick() {
-  const v = document.getElementById("i-nick").value.trim();
-  if (!v) { alert("Please enter a nickname"); return; }
-  if (v.length > 20) { alert("Max 20 characters"); return; }
-  if (/[\[\]\/]/.test(v)) { alert("Cannot contain [ ] /"); return; }
-  apNick = v;
-  localStorage.setItem("assetNick", v);
-  showAPMain();
-  loadGroups();
-}
-
-function clearNick() {
-  apNick = "";
-  apGroups = [];
-  apSelGroup = null;
-  apAssets = [];
-  localStorage.removeItem("assetNick");
-  document.getElementById("ap-main").hidden = true;
-  document.getElementById("ap-nick-sec").hidden = false;
-  document.getElementById("ap-assets-sec").hidden = true;
-}
-
-function showAPMain() {
-  document.getElementById("ap-nick-sec").hidden = true;
-  document.getElementById("ap-main").hidden = false;
-  document.getElementById("ap-nick-display").textContent = apNick;
-}
-
-async function apCall(action, body) {
-  const resp = await fetch(`/api/asset/${action}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await resp.json();
-  if (data.ResponseMetadata?.Error) {
-    throw new Error(data.ResponseMetadata.Error.Message || data.ResponseMetadata.Error.Code);
-  }
-  if (data.error) throw new Error(data.error);
-  return data.Result || data;
-}
-
-function toggleAP() {
-  const panel = document.getElementById("ap-panel");
-  const ov = document.getElementById("ap-ov");
-  const opening = !panel.classList.contains("open");
-  panel.classList.toggle("open");
-  ov.classList.toggle("open");
-  if (opening && apNick && apGroups.length === 0) loadGroups();
-  if (!opening) { clearInterval(apPoll); apPoll = null; }
-}
-
-document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && document.getElementById("ap-panel").classList.contains("open")) toggleAP();
-});
-
-async function loadGroups() {
-  const el = document.getElementById("ap-groups");
-  el.innerHTML = '<p class="empty">Loading...</p>';
-  try {
-    const r = await apCall("ListAssetGroups", {
-      Filter: { Name: groupPrefix(), GroupType: "AIGC" }, PageNumber: 1, PageSize: 100,
-    });
-    apGroups = (r.Items || []).filter(isMyGroup);
-    renderGroups();
-  } catch (err) {
-    el.innerHTML = `<p class="ap-err">${esc(err.message)}</p>`;
-  }
-}
-
-function renderGroups() {
-  const el = document.getElementById("ap-groups");
-  if (apGroups.length === 0) {
-    el.innerHTML = '<p class="empty">No groups yet. Create one to start.</p>';
-    return;
-  }
-  el.innerHTML = apGroups.map(g => {
-    const sel = apSelGroup === g.Id ? " sel" : "";
-    const name = displayGroupName(g.Name);
-    return `<div class="ap-grp${sel}" onclick="selectGroup('${escJs(g.Id)}')">
-      <div style="font-weight:500;flex:1">${esc(name)}</div>
-      <span class="x" onclick="event.stopPropagation();deleteGroup('${escJs(g.Id)}','${escJs(name)}')" title="Delete group">&times;</span>
-    </div>`;
-  }).join("");
-}
-
-async function createGroup() {
-  if (!apNick) { alert("Set your nickname first"); return; }
-  const name = prompt("Group name:");
-  if (!name || !name.trim()) return;
-  const trimmed = name.trim();
-  if (trimmed.length > 40) { alert("Max 40 characters"); return; }
-  // Check duplicate
-  const fullName = groupPrefix() + trimmed;
-  if (apGroups.some(g => g.Name === fullName)) {
-    alert("A group with this name already exists"); return;
-  }
-  try {
-    const r = await apCall("CreateAssetGroup", { Name: fullName, GroupType: "AIGC" });
-    await loadGroups();
-    selectGroup(r.Id);
-  } catch (err) { alert("Failed: " + err.message); }
-}
-
-async function deleteGroup(gid, displayName) {
-  if (!confirm(`Delete group "${displayName}" and all its assets?`)) return;
-  try {
-    await apCall("UpdateAssetGroup", { Id: gid, Name: DEL_PREFIX + Date.now() });
-    if (apSelGroup === gid) {
-      apSelGroup = null;
-      apAssets = [];
-      document.getElementById("ap-assets-sec").hidden = true;
-    }
-    apGroups = apGroups.filter(g => g.Id !== gid);
-    renderGroups();
-  } catch (err) { alert("Delete failed: " + err.message); }
-}
-
-async function selectGroup(gid) {
-  apSelGroup = gid;
-  renderGroups();
-  document.getElementById("ap-assets-sec").hidden = false;
-  const g = apGroups.find(x => x.Id === gid);
-  document.getElementById("ap-at").textContent = g ? displayGroupName(g.Name) : "Assets";
-  await loadAssets();
-}
-
-async function loadAssets() {
-  if (!apSelGroup) return;
-  const el = document.getElementById("ap-assets");
-  el.innerHTML = '<p class="empty">Loading...</p>';
-  try {
-    const r = await apCall("ListAssets", {
-      Filter: { GroupIds: [apSelGroup], GroupType: "AIGC" },
-      PageNumber: 1, PageSize: 100, SortBy: "CreateTime", SortOrder: "Desc",
-    });
-    apAssets = (r.Items || []).filter(a => !a.Name?.startsWith(DEL_PREFIX));
-    renderAssets();
-    if (apAssets.some(a => a.Status === "Processing")) startAPPoll();
-  } catch (err) {
-    el.innerHTML = `<p class="ap-err">${esc(err.message)}</p>`;
-  }
-}
-
-function renderAssets() {
-  const el = document.getElementById("ap-assets");
-  if (apAssets.length === 0) {
-    el.innerHTML = '<p class="empty">Upload an image to get started</p>';
-    return;
-  }
-  el.innerHTML = apAssets.map(a => {
-    const sc = a.Status === "Active" ? "completed" : a.Status === "Failed" ? "failed" : "processing";
-    const name = a.Name || a.Id;
-    let h = `<div class="ap-item"><div class="th">
-      <span class="tid" title="${esc(a.Id)}">${esc(name)}</span>
-      <div><span class="st ${sc}">${a.Status}</span>
-      <span class="x" onclick="deleteAsset('${escJs(a.Id)}','${escJs(name)}')" title="Delete">&times;</span></div></div>`;
-    if (a.URL && a.Status === "Active") h += `<img src="${esc(a.URL)}" loading="lazy">`;
-    if (a.Error?.Message) h += `<div class="ap-err">${esc(a.Error.Message)}</div>`;
-    if (a.Status === "Active") {
-      h += `<button onclick="useAsset('${escJs(a.Id)}')" style="margin-top:6px;width:100%;font-size:12px">Use in Generation</button>`;
-    }
-    return h + "</div>";
-  }).join("");
-}
-
-async function deleteAsset(aid, name) {
-  if (!confirm(`Delete asset "${name}"?`)) return;
-  try {
-    await apCall("UpdateAsset", { Id: aid, Name: DEL_PREFIX + Date.now() });
-    apAssets = apAssets.filter(a => a.Id !== aid);
-    renderAssets();
-  } catch (err) { alert("Delete failed: " + err.message); }
-}
-
-async function uploadAssetFile() {
-  if (!apSelGroup) { alert("Select a group first"); return; }
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif";
-  input.onchange = async () => {
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 30 * 1024 * 1024) { alert("File must be under 30 MB"); return; }
-    try {
-      const pr = await fetch("/api/cos/presign", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, contentType: file.type }),
-      });
-      if (!pr.ok) throw new Error("Failed to get upload URL");
-      const ps = await pr.json();
-      const up = await fetch(ps.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      if (!up.ok) throw new Error("COS upload failed");
-      await apCall("CreateAsset", {
-        GroupId: apSelGroup, URL: ps.fileUrl, AssetType: "Image", Name: file.name,
-      });
-      await loadAssets();
-    } catch (err) { alert("Upload failed: " + err.message); }
-  };
-  input.click();
-}
-
-async function addAssetByUrl() {
-  if (!apSelGroup) { alert("Select a group first"); return; }
-  const url = prompt("Image URL (publicly accessible):");
-  if (!url || !url.trim()) return;
-  try {
-    await apCall("CreateAsset", {
-      GroupId: apSelGroup, URL: url.trim(), AssetType: "Image",
-    });
-    await loadAssets();
-  } catch (err) { alert("Failed: " + err.message); }
-}
-
-function useAsset(assetId) {
-  addMedia("image");
-  const items = document.querySelectorAll('.mi[data-type="image"]');
-  const last = items[items.length - 1];
-  last.querySelector(".mu").value = `asset://${assetId}`;
-  last.querySelector(".mr").value = "reference_image";
-  toggleAP();
-}
-
-function startAPPoll() {
-  if (apPoll) return;
-  apPoll = setInterval(pollAPAssets, 5000);
-}
-
-async function pollAPAssets() {
-  const proc = apAssets.filter(a => a.Status === "Processing");
-  if (proc.length === 0) { clearInterval(apPoll); apPoll = null; return; }
-  let changed = false;
-  for (const a of proc) {
-    try {
-      const r = await apCall("GetAsset", { Id: a.Id });
-      if (r.Status !== a.Status) { Object.assign(a, r); changed = true; }
-    } catch (err) { console.error("poll asset:", err); }
-  }
-  if (changed) renderAssets();
-}
+const DEL_PREFIX="__del__";let apGroups=[],apSelGroup=null,apAssets=[],apPoll=null,apNick=localStorage.getItem("assetNick")||"";
+function groupPrefix(){return`[${apNick}] `}
+function displayGroupName(n){return n.replace(groupPrefix(),"")}
+function isMyGroup(g){return g.Name&&g.Name.startsWith(groupPrefix())&&!g.Name.startsWith(DEL_PREFIX)}
+(function initAP(){if(apNick){document.getElementById("i-nick").value=apNick;showAPMain()}})();
+function saveNick(){const v=document.getElementById("i-nick").value.trim();if(!v){alert("Please enter a nickname");return}if(v.length>20){alert("Max 20 characters");return}if(/[\[\]\/]/.test(v)){alert("Cannot contain [ ] /");return}apNick=v;localStorage.setItem("assetNick",v);showAPMain();loadGroups()}
+function clearNick(){apNick="";apGroups=[];apSelGroup=null;apAssets=[];localStorage.removeItem("assetNick");document.getElementById("ap-main").hidden=true;document.getElementById("ap-nick-sec").hidden=false;document.getElementById("ap-assets-sec").hidden=true}
+function showAPMain(){document.getElementById("ap-nick-sec").hidden=true;document.getElementById("ap-main").hidden=false;document.getElementById("ap-nick-display").textContent=apNick}
+async function apCall(action,body){const resp=await fetch(`/api/asset/${action}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const data=await resp.json();if(data.ResponseMetadata?.Error)throw new Error(data.ResponseMetadata.Error.Message||data.ResponseMetadata.Error.Code);if(data.error)throw new Error(data.error);return data.Result||data}
+function toggleAP(){const panel=document.getElementById("ap-panel"),ov=document.getElementById("ap-ov"),opening=!panel.classList.contains("open");panel.classList.toggle("open");ov.classList.toggle("open");if(opening&&apNick&&apGroups.length===0)loadGroups();if(!opening){clearInterval(apPoll);apPoll=null}}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&document.getElementById("ap-panel").classList.contains("open"))toggleAP()});
+async function loadGroups(){const el=document.getElementById("ap-groups");el.innerHTML='<p class="empty">Loading...</p>';try{const r=await apCall("ListAssetGroups",{Filter:{Name:groupPrefix(),GroupType:"AIGC"},PageNumber:1,PageSize:100});apGroups=(r.Items||[]).filter(isMyGroup);renderGroups()}catch(err){el.innerHTML=`<p class="ap-err">${esc(err.message)}</p>`}}
+function renderGroups(){const el=document.getElementById("ap-groups");if(!apGroups.length){el.innerHTML='<p class="empty">No groups yet. Create one to start.</p>';return}el.innerHTML=apGroups.map(g=>{const sel=apSelGroup===g.Id?" sel":"",name=displayGroupName(g.Name);return`<div class="ap-grp${sel}" onclick="selectGroup('${escJs(g.Id)}')"><div style="font-weight:500;flex:1">${esc(name)}</div><span class="x" onclick="event.stopPropagation();deleteGroup('${escJs(g.Id)}','${escJs(name)}')" title="Delete">&times;</span></div>`}).join("")}
+async function createGroup(){if(!apNick){alert("Set your nickname first");return}const name=prompt("Group name:");if(!name||!name.trim())return;const trimmed=name.trim();if(trimmed.length>40){alert("Max 40 characters");return}const fullName=groupPrefix()+trimmed;if(apGroups.some(g=>g.Name===fullName)){alert("A group with this name already exists");return}try{const r=await apCall("CreateAssetGroup",{Name:fullName,GroupType:"AIGC"});await loadGroups();selectGroup(r.Id)}catch(err){alert("Failed: "+err.message)}}
+async function deleteGroup(gid,displayName){if(!confirm(`Delete group "${displayName}" and all its assets?`))return;try{await apCall("UpdateAssetGroup",{Id:gid,Name:DEL_PREFIX+Date.now()});if(apSelGroup===gid){apSelGroup=null;apAssets=[];document.getElementById("ap-assets-sec").hidden=true}apGroups=apGroups.filter(g=>g.Id!==gid);renderGroups()}catch(err){alert("Delete failed: "+err.message)}}
+async function selectGroup(gid){apSelGroup=gid;renderGroups();document.getElementById("ap-assets-sec").hidden=false;const g=apGroups.find(x=>x.Id===gid);document.getElementById("ap-at").textContent=g?displayGroupName(g.Name):"Assets";await loadAssets()}
+async function loadAssets(){if(!apSelGroup)return;const el=document.getElementById("ap-assets");el.innerHTML='<p class="empty">Loading...</p>';try{const r=await apCall("ListAssets",{Filter:{GroupIds:[apSelGroup],GroupType:"AIGC"},PageNumber:1,PageSize:100,SortBy:"CreateTime",SortOrder:"Desc"});apAssets=(r.Items||[]).filter(a=>!a.Name?.startsWith(DEL_PREFIX));renderAssets();if(apAssets.some(a=>a.Status==="Processing"))startAPPoll()}catch(err){el.innerHTML=`<p class="ap-err">${esc(err.message)}</p>`}}
+function renderAssets(){const el=document.getElementById("ap-assets");if(!apAssets.length){el.innerHTML='<p class="empty">Upload an image to get started</p>';return}el.innerHTML=apAssets.map(a=>{const sc=a.Status==="Active"?"completed":a.Status==="Failed"?"failed":"processing";const name=a.Name||a.Id;let h=`<div class="ap-item"><div class="th"><span class="tid" title="${esc(a.Id)}">${esc(name)}</span><div><span class="st ${sc}">${a.Status}</span><span class="x" onclick="deleteAsset('${escJs(a.Id)}','${escJs(name)}')" title="Delete">&times;</span></div></div>`;if(a.URL&&a.Status==="Active")h+=`<img src="${esc(a.URL)}" loading="lazy">`;if(a.Error?.Message)h+=`<div class="ap-err">${esc(a.Error.Message)}</div>`;if(a.Status==="Active")h+=`<button onclick="useAsset('${escJs(a.Id)}')" style="margin-top:6px;width:100%;font-size:12px">Use in Generation</button>`;return h+"</div>"}).join("")}
+async function deleteAsset(aid,name){if(!confirm(`Delete asset "${name}"?`))return;try{await apCall("UpdateAsset",{Id:aid,Name:DEL_PREFIX+Date.now()});apAssets=apAssets.filter(a=>a.Id!==aid);renderAssets()}catch(err){alert("Delete failed: "+err.message)}}
+async function uploadAssetFile(){if(!apSelGroup){alert("Select a group first");return}const input=document.createElement("input");input.type="file";input.accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif";input.onchange=async()=>{const file=input.files[0];if(!file)return;if(file.size>30*1024*1024){alert("File must be under 30 MB");return}try{const pr=await fetch("/api/cos/presign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:file.name,contentType:file.type})});if(!pr.ok)throw new Error("Failed to get upload URL");const ps=await pr.json();const up=await fetch(ps.uploadUrl,{method:"PUT",headers:{"Content-Type":file.type},body:file});if(!up.ok)throw new Error("COS upload failed");await apCall("CreateAsset",{GroupId:apSelGroup,URL:ps.fileUrl,AssetType:"Image",Name:file.name});await loadAssets()}catch(err){alert("Upload failed: "+err.message)}};input.click()}
+async function addAssetByUrl(){if(!apSelGroup){alert("Select a group first");return}const url=prompt("Image URL (publicly accessible):");if(!url||!url.trim())return;try{await apCall("CreateAsset",{GroupId:apSelGroup,URL:url.trim(),AssetType:"Image"});await loadAssets()}catch(err){alert("Failed: "+err.message)}}
+function useAsset(assetId){const id=++mediaIdCounter;mediaItems.push({id,type:"image",url:`asset://${assetId}`,thumbUrl:"",name:assetId.slice(0,10)+"...",file:null});renderStack();toggleAP()}
+function startAPPoll(){if(apPoll)return;apPoll=setInterval(pollAPAssets,5000)}
+async function pollAPAssets(){const proc=apAssets.filter(a=>a.Status==="Processing");if(!proc.length){clearInterval(apPoll);apPoll=null;return}let changed=false;for(const a of proc){try{const r=await apCall("GetAsset",{Id:a.Id});if(r.Status!==a.Status){Object.assign(a,r);changed=true}}catch(err){console.error("poll asset:",err)}}if(changed)renderAssets()}
 </script>
 </body>
 </html>
