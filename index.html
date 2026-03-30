@@ -85,6 +85,9 @@ a.s:hover{border-color:#999}
 .send-btn:hover{background:#333;transform:scale(1.05)}
 .send-btn:disabled{opacity:.3;cursor:default;transform:none}
 .send-btn svg{width:18px;height:18px}
+@keyframes send-pulse{0%{transform:scale(1)}35%{transform:scale(0.86)}70%{transform:scale(1.05)}100%{transform:scale(1)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.send-btn.sending{animation:send-pulse .38s cubic-bezier(.36,.07,.19,.97);pointer-events:none}
 
 
 /* ── Popups ── */
@@ -120,7 +123,8 @@ a.s:hover{border-color:#999}
 .st.running{color:#0969da;background:#ddf4ff}
 .st.completed{color:#1a7f37;background:#dafbe1}
 .st.failed,.st.cancelled{color:#cf222e;background:#ffebe9}
-.st.submitted,.st.processing{color:#9a6700;background:#fff8c5}
+.st.submitted,.st.processing,.st.whitelisting{color:#9a6700;background:#fff8c5}
+.st.submitting{color:#6e40c9;background:#f3effe}
 .task video{max-width:100%;margin-top:8px;display:block;border:1px solid #e0e0e0;border-radius:10px}
 .ta{margin-top:8px;display:flex;gap:8px;align-items:center}
 .rj{margin-top:8px;font-family:ui-monospace,monospace;font-size:11px;background:#f6f8fa;padding:8px;overflow:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;border:1px solid #eee;border-radius:8px}
@@ -171,7 +175,7 @@ details summary{font-size:11px;color:#999;cursor:pointer}
       <div class="add-circle-wrap" id="add-wrap">
         <div class="add-circle" onclick="pickFile()" id="add-btn">
           <span>+</span>
-          <span class="add-circle-label">参考内容</span>
+          <span class="add-circle-label">Media</span>
         </div>
       </div>
     </div>
@@ -189,7 +193,7 @@ details summary{font-size:11px;color:#999;cursor:pointer}
     </div>
     <div class="compose-prompt">
       <div class="prompt-highlight" id="prompt-highlight"></div>
-      <textarea id="i-prompt" placeholder="描述参考内容，例如：@图片1 模仿 @视频1 的动作，音色参考 @音频1" rows="2"></textarea>
+      <textarea id="i-prompt" placeholder="Describe the reference content, e.g.: @image1 mimics @video1 motion, voice from @audio1" rows="2"></textarea>
     </div>
   </div>
   <div class="toolbar">
@@ -202,7 +206,7 @@ details summary{font-size:11px;color:#999;cursor:pointer}
     <!-- Reference mode -->
     <div class="pill" onclick="togglePill('ref-popup',this)">
       <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
-      <span id="ref-label">全能参考</span>
+      <span id="ref-label">Reference</span>
       <span class="pill-chevron"><svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <input type="hidden" id="i-ref" value="all">
     </div>
@@ -240,8 +244,8 @@ details summary{font-size:11px;color:#999;cursor:pointer}
   </div>
   <!-- Ref mode popup -->
   <div class="popup" id="ref-popup">
-    <div class="popup-item selected" data-value="all" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> 全能参考 <span class="check">&#x2713;</span></div>
-    <div class="popup-item" data-value="keyframes" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/></svg></span> 首尾帧 <span class="check" style="display:none">&#x2713;</span></div>
+    <div class="popup-item selected" data-value="all" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> Reference <span class="check">&#x2713;</span></div>
+    <div class="popup-item" data-value="keyframes" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/></svg></span> Keyframes <span class="check" style="display:none">&#x2713;</span></div>
   </div>
   <!-- Ratio popup -->
   <div class="popup" id="ratio-popup" style="min-width:320px">
@@ -457,7 +461,7 @@ function selectModel(el) {
 function selectRef(el) {
   const v = el.dataset.value;
   document.getElementById("i-ref").value = v;
-  const labels = { all:"全能参考", keyframes:"首尾帧" };
+  const labels = { all:"Reference", keyframes:"Keyframes" };
   document.getElementById("ref-label").textContent = labels[v] || v;
   document.querySelectorAll("#ref-popup .popup-item").forEach(item => {
     item.classList.toggle("selected", item.dataset.value === v);
@@ -473,8 +477,8 @@ function syncRefMode() {
   document.getElementById("media-stack").style.display = isKf ? "none" : "";
   document.getElementById("kf-area").classList.toggle("visible", isKf);
   document.getElementById("i-prompt").placeholder = isKf
-    ? "输入文字，描述你想创作的画面内容、运动方式等。例如：一个3D形象的小男孩，在公园滑滑板。"
-    : "描述参考内容，例如：@图片1 模仿 @视频1 的动作，音色参考 @音频1";
+    ? "Describe the scene, motion, style, etc. E.g.: A 3D cartoon boy skateboarding in the park."
+    : "Describe the reference content, e.g.: @image1 mimics @video1 motion, voice from @audio1";
   document.getElementById("at-pill").style.display = isKf ? "none" : "";
 }
 
@@ -509,7 +513,7 @@ function selectDur(d) {
 function buildMentionList() {
   const el = document.getElementById("mention-list");
   if (mediaItems.length === 0) {
-    el.innerHTML = '<div style="padding:10px 16px;color:#aaa;font-size:12px">暂无参考内容</div>';
+    el.innerHTML = '<div style="padding:10px 16px;color:#aaa;font-size:12px">No media added</div>';
     return;
   }
   mentionIdx = 0;
@@ -818,24 +822,11 @@ async function handleFileForItem(id, file) {
       if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     }
     item.url = fileUrl;
+    item.cosUrl = fileUrl; // Persist COS URL for display (blob URLs expire)
     console.log(`[Upload] ${item.type} uploaded to COS:`, fileUrl);
-    // Auto-create asset for images
-    if (item.type === "image") {
-      try {
-        console.log("[Asset] Step 1: COS URL ready:", fileUrl);
-        console.log("[Asset] Step 2: Creating asset via API...");
-        const assetId = await createImageAsset(fileUrl, item.name);
-        console.log("[Asset] Step 3: Asset created! ID:", assetId);
-        item.url = "asset://" + assetId;
-        await new Promise(r => setTimeout(r, 1000));
-        console.log("[Asset] Step 4: item.url set to:", item.url);
-      } catch (err) {
-        console.warn("[Asset] Failed, keeping COS URL:", err.message);
-      }
-    }
     renderStack();
   } catch (err) {
-    alert("上传失败: " + err.message);
+    alert("上传失败，请重试");
     removeMediaItem(id);
   } finally {
     pendingUploads--;
@@ -902,15 +893,9 @@ async function uploadKfFile(which, file) {
     });
     if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     obj.url = presign.fileUrl;
-    // Auto-create asset for keyframe image
-    try {
-      const assetId = await createImageAsset(presign.fileUrl, file.name);
-      obj.url = "asset://" + assetId;
-    } catch (err) {
-      console.warn("Asset creation failed, using COS URL:", err);
-    }
+    obj.cosUrl = presign.fileUrl;
   } catch (err) {
-    alert("上传失败: " + err.message);
+    alert("上传失败，请重试");
     if (which === "first") kfFirst = null; else kfLast = null;
     renderKfCard(which);
   }
@@ -973,26 +958,27 @@ function buildRequest() {
 // ── Generate ──
 async function generate() {
   const btn = document.getElementById("gen-btn");
+  // Micro-animation: restart by forcing reflow
+  btn.classList.remove("sending");
+  void btn.offsetWidth;
+  btn.classList.add("sending");
   btn.disabled = true;
   try {
-    // Wait for any pending uploads + asset creation to finish
     if (pendingUploads > 0) {
       while (pendingUploads > 0) await new Promise(r => setTimeout(r, 200));
     }
-    // Also wait for queued asset creations to complete
-    await assetQueue;
-    // Verify all images have asset IDs
-    const refMode = document.getElementById("i-ref").value;
-    if (refMode === "all") {
-      const missingAsset = mediaItems.filter(m => m.type === "image" && m.url && !m.url.startsWith("asset://"));
-      if (missingAsset.length > 0) {
-        console.warn("[Generate] Images without asset ID:", missingAsset.map(m => m.name));
-      }
+    const apiKey = document.getElementById("i-key").value.trim();
+    if (!apiKey) {
+      btn.disabled = false; btn.classList.remove("sending");
+      alert("Please enter your API Key in API Settings before generating."); return;
     }
+    const refMode = document.getElementById("i-ref").value;
     const body = buildRequest();
     console.log("[Generate] Request body:", JSON.stringify(body, null, 2));
-    if (body.content.length === 0) { alert("请至少提供一个 Prompt 或媒体输入"); return; }
-    // Capture input snapshot before sending
+    if (body.content.length === 0) {
+      btn.disabled = false; btn.classList.remove("sending");
+      alert("Please add a prompt or media before generating."); return;
+    }
     const inputSnapshot = {
       prompt: document.getElementById("i-prompt").value.trim(),
       model: document.getElementById("i-model").value,
@@ -1001,27 +987,93 @@ async function generate() {
       refMode,
       webSearch: document.getElementById("i-search")?.checked || false,
       watermark: document.getElementById("i-wm")?.checked || false,
-      mediaItems: refMode === "all" ? mediaItems.filter(m => m.url).map(m => ({ type: m.type, url: m.url, name: m.name })) : [],
-      kfFirst: (kfFirst && kfFirst.url) ? { url: kfFirst.url, name: kfFirst.name } : null,
-      kfLast: (kfLast && kfLast.url) ? { url: kfLast.url, name: kfLast.name } : null,
+      mediaItems: refMode === "all" ? mediaItems.filter(m => m.url).map(m => ({ type: m.type, url: m.url, cosUrl: m.cosUrl || "", name: m.name })) : [],
+      kfFirst: (kfFirst && kfFirst.url) ? { url: kfFirst.url, cosUrl: kfFirst.cosUrl || "", name: kfFirst.name } : null,
+      kfLast: (kfLast && kfLast.url) ? { url: kfLast.url, cosUrl: kfLast.cosUrl || "", name: kfLast.name } : null,
     };
-    const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(body) });
-    const data = await resp.json();
-    if (!resp.ok || (data.code && data.code !== "success")) {
-      alert("Error: " + (data.error?.message || data.message || data.error || JSON.stringify(data)));
-      return;
+    // Show placeholder task immediately
+    const task = { id: null, status: "submitting", progress: 0, created: Date.now(), response: null, videoUrl: null, pollErrors: 0, input: inputSnapshot };
+    tasks.unshift(task);
+    renderTasks();
+    // Re-enable button after 1.5s regardless of submission result
+    setTimeout(() => { btn.disabled = false; btn.classList.remove("sending"); }, 1500);
+    // Run submission in background (non-blocking)
+    runSubmit(task, body);
+  } catch (err) {
+    btn.disabled = false; btn.classList.remove("sending");
+    alert(friendlyError(err.message));
+  }
+}
+
+async function runSubmit(task, body) {
+  let lastErr = "";
+  let currentBody = body;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`[Generate] Attempt ${attempt}/3...`);
+      const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(currentBody) });
+      const data = await resp.json();
+      const errMsg = data.error?.message || data.message || "";
+      if (!resp.ok || (data.code && data.code !== "success")) {
+        lastErr = errMsg || JSON.stringify(data);
+        console.warn(`[Generate] Attempt ${attempt} failed:`, lastErr);
+        // PrivacyInformation → create assets, update task status, retry
+        if (lastErr.includes("PrivacyInformation") && attempt < 3) {
+          console.log("[Generate] PrivacyInformation detected, creating assets...");
+          task.status = "whitelisting";
+          renderTasks();
+          const imageItems = mediaItems.filter(m => m.type === "image" && m.url && !m.url.startsWith("asset://"));
+          const kfItems = [];
+          if (kfFirst?.url && !kfFirst.url.startsWith("asset://")) kfItems.push(kfFirst);
+          if (kfLast?.url && !kfLast.url.startsWith("asset://")) kfItems.push(kfLast);
+          await Promise.all([
+            ...imageItems.map(async (m) => {
+              try {
+                const id = await createImageAsset(m.cosUrl || m.url, m.name);
+                await new Promise(r => setTimeout(r, 5000)); // let asset process
+                m.url = "asset://" + id;
+              } catch (err) { console.warn("[Generate] Asset creation failed for", m.name, err); }
+            }),
+            ...kfItems.map(async (obj) => {
+              try {
+                const id = await createImageAsset(obj.cosUrl || obj.url, obj.name);
+                await new Promise(r => setTimeout(r, 5000));
+                obj.url = "asset://" + id;
+              } catch (err) { console.warn("[Generate] Asset creation failed for KF", err); }
+            }),
+          ]);
+          currentBody = buildRequest();
+          console.log("[Generate] Retrying with asset URLs...");
+          continue;
+        }
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+      } else {
+        const parsed = parseResponse(data);
+        task.id = parsed.id;
+        task.status = parsed.status;
+        task.progress = parsed.progress;
+        task.response = data;
+        task.videoUrl = parsed.videoUrl;
+        saveTasks(); renderTasks();
+        if (parsed.id) startPolling();
+        return;
+      }
+    } catch (e) {
+      lastErr = e.message;
+      console.warn(`[Generate] Attempt ${attempt} error:`, e.message);
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
     }
-    const parsed = parseResponse(data);
-    tasks.unshift({ id: parsed.id, status: parsed.status, progress: parsed.progress, created: Date.now(), response: data, videoUrl: parsed.videoUrl, pollErrors: 0, input: inputSnapshot });
-    saveTasks(); renderTasks();
-    if (parsed.id) startPolling();
-  } catch (err) { alert("Request failed: " + err.message); }
-  finally { btn.disabled = false; }
+  }
+  // All attempts failed
+  task.status = "failed";
+  task.error = friendlyError(lastErr);
+  task.response = { _error: lastErr };
+  saveTasks(); renderTasks();
 }
 
 // ── Task management ──
 function saveTasks() {
-  const slim = tasks.slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response, input:t.input }));
+  const slim = tasks.filter(t => t.id).slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response, input:t.input }));
   localStorage.setItem("tasks", JSON.stringify(slim));
 }
 
@@ -1083,10 +1135,10 @@ function renderTaskInput(t) {
   // Thumbnails
   const thumbs = [];
   if (inp.refMode === 'keyframes') {
-    if (inp.kfFirst) thumbs.push({ type:'image', url:inp.kfFirst.url, label:'首帧' });
-    if (inp.kfLast) thumbs.push({ type:'image', url:inp.kfLast.url, label:'尾帧' });
+    if (inp.kfFirst) thumbs.push({ type:'image', url:inp.kfFirst.cosUrl||inp.kfFirst.url, label:'首帧' });
+    if (inp.kfLast) thumbs.push({ type:'image', url:inp.kfLast.cosUrl||inp.kfLast.url, label:'尾帧' });
   } else if (inp.mediaItems && inp.mediaItems.length) {
-    for (const m of inp.mediaItems) thumbs.push({ type:m.type, url:m.url, label:m.name });
+    for (const m of inp.mediaItems) thumbs.push({ type:m.type, url:m.cosUrl||m.url, label:m.name });
   }
   if (thumbs.length) {
     h += '<div class="task-input-media">';
@@ -1105,7 +1157,7 @@ function renderTaskInput(t) {
   }
   // Tags
   const ml = inp.model === 'seedance-fast' ? 'Fast' : '2.0';
-  const rl = inp.refMode === 'keyframes' ? '首尾帧' : '全能参考';
+  const rl = inp.refMode === 'keyframes' ? 'Keyframes' : 'Reference';
   h += `<div class="task-input-tags"><span class="task-input-tag">${esc(ml)}</span><span class="task-input-tag">${esc(rl)}</span><span class="task-input-tag">${esc(inp.ratio)}</span><span class="task-input-tag">${inp.duration}s</span></div>`;
   return h + '</div>';
 }
@@ -1133,8 +1185,8 @@ function restoreInput(taskId) {
 
   // Ref mode
   document.getElementById("i-ref").value = inp.refMode || "all";
-  const refLabels = { all:"全能参考", keyframes:"首尾帧" };
-  document.getElementById("ref-label").textContent = refLabels[inp.refMode] || "全能参考";
+  const refLabels = { all:"Reference", keyframes:"Keyframes" };
+  document.getElementById("ref-label").textContent = refLabels[inp.refMode] || "Reference";
   document.querySelectorAll("#ref-popup .popup-item").forEach(item => {
     item.classList.toggle("selected", item.dataset.value === inp.refMode);
     item.querySelector(".check").style.display = item.dataset.value === inp.refMode ? "" : "none";
@@ -1164,7 +1216,8 @@ function restoreInput(taskId) {
         id: ++mediaIdCounter,
         type: m.type,
         url: m.url,
-        thumbUrl: m.url.startsWith("asset://") ? "" : m.url,
+        thumbUrl: m.cosUrl || m.url,
+        cosUrl: m.cosUrl || "",
         name: m.name,
         file: null
       });
@@ -1175,11 +1228,11 @@ function restoreInput(taskId) {
   // Restore keyframes
   if (inp.refMode === "keyframes") {
     if (inp.kfFirst) {
-      kfFirst = { url: inp.kfFirst.url, thumbUrl: inp.kfFirst.url, name: inp.kfFirst.name, file: null };
+      kfFirst = { url: inp.kfFirst.url, thumbUrl: inp.kfFirst.cosUrl || inp.kfFirst.url, cosUrl: inp.kfFirst.cosUrl || "", name: inp.kfFirst.name, file: null };
       renderKfCard("first");
     }
     if (inp.kfLast) {
-      kfLast = { url: inp.kfLast.url, thumbUrl: inp.kfLast.url, name: inp.kfLast.name, file: null };
+      kfLast = { url: inp.kfLast.url, thumbUrl: inp.kfLast.cosUrl || inp.kfLast.url, cosUrl: inp.kfLast.cosUrl || "", name: inp.kfLast.name, file: null };
       renderKfCard("last");
     }
   }
@@ -1191,9 +1244,16 @@ function restoreInput(taskId) {
 function renderTasks() {
   const c = document.getElementById("tasks");
   if (!tasks.length) { c.innerHTML = '<p class="empty">No tasks yet</p>'; return; }
+  const SL = {submitting:"提交中",whitelisting:"处理隐私图片",submitted:"已提交",processing:"生成中",running:"生成中",completed:"完成",failed:"失败",cancelled:"已取消"};
   c.innerHTML = tasks.map(t => {
-    let h = `<div class="task"><div class="th"><span class="tid">${t.id||"—"}</span><span><span class="st ${t.status}">${t.status}</span>${t.progress?`<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>`:""}<span data-elapsed="${t.id}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span></span></div>`;
+    const isLive = t.status === "submitting" || t.status === "whitelisting";
+    const liveIcon = isLive ? `<span style="display:inline-block;width:9px;height:9px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:3px"></span>` : "";
+    const key = t.id || ("_" + t.created);
+    let h = `<div class="task"><div class="th"><span class="tid">${t.id||""}</span><span><span class="st ${t.status}">${liveIcon}${SL[t.status]||t.status}</span>${t.progress?`<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>`:""}<span data-elapsed="${key}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span></span></div>`;
     h += renderTaskInput(t);
+    if (t.error) {
+      h += `<div style="margin-top:6px;padding:7px 10px;background:#fff0f0;border:1px solid #ffc8c8;border-radius:8px;font-size:12px;color:#cf222e">${esc(t.error)}</div>`;
+    }
     if (t.videoUrl) {
       h += `<video src="${esc(t.videoUrl)}" controls preload="metadata"></video>`;
       h += `<div class="ta"><input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa"><button class="s" onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">Copy</button><a href="${esc(t.videoUrl)}" target="_blank" download class="s">Download</a></div>`;
@@ -1204,10 +1264,24 @@ function renderTasks() {
 }
 
 function clearTasks(){if(!confirm("Clear all task history?"))return;tasks.length=0;saveTasks();renderTasks()}
+function friendlyError(msg) {
+  if (!msg) return "生成失败，请重试";
+  if (msg.includes("timeout") || msg.includes("Timeout")) return "服务繁忙，请稍后重试";
+  if (msg.includes("resolve asset")) return "素材处理中，请稍后重试";
+  if (msg.includes("image_url")) return "图片处理异常，请重新上传图片后重试";
+  if (msg.includes("SensitiveContent") || msg.includes("PrivacyInformation")) return "图片内容不符合规范，请更换图片";
+  if (msg.includes("content moderation")) return "内容审核未通过，请调整提示词或素材";
+  if (msg.includes("rate limit") || msg.includes("RateLimit")) return "请求过于频繁，请稍后重试";
+  if (msg.includes("401") || msg.includes("Unauthorized")) return "API Key 无效，请检查设置";
+  if (msg.includes("NetworkError") || msg.includes("Failed to fetch")) return "网络连接失败，请检查网络";
+  // Truncate long technical messages
+  if (msg.length > 80) return "生成失败：" + msg.slice(0, 60) + "...";
+  return "生成失败：" + msg;
+}
 function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML}
 function escJs(s){return s.replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"')}
 
-setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const task=tasks.find(t=>t.id===el.dataset.elapsed);if(task&&!task.endTime)el.textContent=elapsed(task)})},1000);
+setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const key=el.dataset.elapsed;const task=tasks.find(t=>(t.id||("_"+t.created))===key);if(task&&!task.endTime)el.textContent=elapsed(task)})},1000);
 
 // ── Auto Asset Creation ──
 let cachedGroupId = null;
@@ -1292,7 +1366,7 @@ async function createImageAsset(cosUrl, name) {
   const result = await (assetQueue = assetQueue.then(async () => {
     const groupId = await ensureAssetGroup();
     const res = await assetCall("CreateAsset", {
-      GroupId: groupId, URL: cosUrl, AssetType: "Image", Name: name || "image"
+      GroupId: groupId, URL: cosUrl, AssetType: "Image", Name: (name || "image").slice(0, 60)
     });
     cachedGroupCount++;
     return res;
