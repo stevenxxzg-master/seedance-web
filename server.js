@@ -23,6 +23,7 @@ app.use(express.json({ limit: "50mb" }));
 
 // Only serve index.html, not the whole directory (protects .env)
 app.get("/", (_req, res) => res.sendFile(join(__dirname, "index.html")));
+app.get("/zh", (_req, res) => res.sendFile(join(__dirname, "index-zh.html")));
 
 const API_BASE = process.env.API_BASE_URL || "https://www.example.com";
 

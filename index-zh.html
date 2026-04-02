@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seedance</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;max-width:984px;margin:0 auto;padding:24px 20px;color:#1a1a1a;font-size:14px;line-height:1.5;background:#fff}
+h1{font-size:18px;font-weight:600;margin-bottom:16px}
+hr{border:none;border-top:1px solid #eee;margin:20px 0}
+label{font-size:13px;color:#666;display:block;margin-bottom:3px}
+input[type="text"],input[type="number"],input[type="password"],select,textarea{width:100%;padding:6px 10px;border:1px solid #e0e0e0;font:inherit;background:#fff;border-radius:8px;font-size:13px}
+textarea{resize:vertical;min-height:60px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#b0b0b0}
+button{padding:6px 14px;border:1px solid #1a1a1a;background:#1a1a1a;color:#fff;cursor:pointer;font:inherit;border-radius:8px}
+button:hover{background:#333}
+button:disabled{opacity:.4;cursor:default}
+button.s{background:#fff;color:#1a1a1a;border-color:#ddd;border-radius:8px}
+button.s:hover{border-color:#999}
+a.s{display:inline-block;padding:6px 14px;border:1px solid #ddd;background:#fff;color:#1a1a1a;text-decoration:none;text-align:center;font:inherit;cursor:pointer;border-radius:8px}
+a.s:hover{border-color:#999}
+.x{background:none;border:none;color:#bbb;cursor:pointer;padding:0 4px;font-size:16px;line-height:1}
+.x:hover{color:#cf222e}
+.empty{color:#aaa;font-size:13px}
+
+/* ── Compose Box ── */
+.compose{background:#fff;border:1px solid #eff0f2;border-radius:12px;margin-bottom:20px;box-shadow:0 1px 6px rgba(0,0,0,.03);overflow:visible;position:relative;transition:border-color .15s,background .15s}
+.compose.drag-over{border-color:#3d9be9;background:#f8fbff}
+.compose-body{padding:16px 20px 10px;display:flex;gap:12px;align-items:flex-start;min-height:99px}
+/* Media stack */
+.media-stack{flex-shrink:0;position:relative;min-height:64px;display:flex;align-items:center;gap:6px}
+.media-stack.empty-stack{min-height:auto;gap:0}
+.stack-items{position:relative;width:52px;height:64px;flex-shrink:0}
+.stack-items:hover{width:auto;display:flex;gap:8px;height:64px;align-items:flex-start}
+.stack-item{position:absolute;width:52px;height:64px;border-radius:12px;overflow:hidden;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.14);cursor:pointer;flex-shrink:0;transition:all .25s ease}
+.stack-items:hover .stack-item{position:relative;transform:none!important;left:auto!important;top:auto!important;border-color:#e2e4e8;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.stack-item img,.stack-item video{width:100%;height:100%;object-fit:cover}
+.stack-item .stack-icon{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f2f4f6;font-size:20px;color:#a0aab4}
+.stack-item .stack-dur{position:absolute;bottom:2px;left:2px;font-size:8px;background:rgba(0,0,0,.6);color:#fff;padding:1px 4px;border-radius:3px;font-variant-numeric:tabular-nums}
+.stack-item .stack-remove{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer;font-size:10px;line-height:16px;text-align:center;z-index:5;display:none;padding:0}
+.stack-item:hover .stack-remove{display:block}
+.stack-item .stack-remove:hover{background:#e53e3e}
+.stack-upload{display:none}
+.add-circle{width:52px;height:64px;border-radius:12px;background:#fafbfc;border:1.5px dashed #dde0e4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:18px;color:#b8bcc2;transition:all .15s;position:relative;z-index:6;flex-shrink:0}
+.add-circle:hover{background:#f0f2f5;border-color:#c8ccd0;color:#888}
+.add-circle-wrap{display:flex;flex-direction:column;align-items:center;gap:0;flex-shrink:0}
+.add-circle-label{font-size:9px;color:#b8bcc2;white-space:nowrap;letter-spacing:.3px}
+/* Keyframe mode */
+.kf-area{display:none;flex-shrink:0;align-items:center;gap:8px}
+.kf-area.visible{display:flex}
+.kf-card{width:52px;height:64px;border-radius:12px;background:#fafbfc;border:1.5px dashed #dde0e4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;transition:all .15s;position:relative}
+.kf-card:hover{border-color:#c8ccd0;background:#f0f2f5}
+.kf-card.has-img{padding:0;overflow:hidden;border-style:solid;border-color:#e2e4e8;background:#fafbfc}
+.kf-card.has-img img{width:100%;height:100%;object-fit:cover;border-radius:10px}
+.kf-card .kf-plus{font-size:18px;color:#b8bcc2;font-weight:300;line-height:1}
+.kf-card .kf-label{font-size:8px;color:#b8bcc2;text-align:center;line-height:1.3}
+.kf-card .kf-remove{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer;font-size:10px;line-height:16px;text-align:center;z-index:5;display:none;padding:0}
+.kf-card:hover .kf-remove{display:block}
+.kf-card .kf-remove:hover{background:#e53e3e}
+.kf-arrow{font-size:16px;color:#c0c4ca;user-select:none}
+/* Prompt area - use contenteditable for inline highlights */
+.compose-prompt{flex:1;padding-top:4px;position:relative}
+.compose-prompt .prompt-editor{border:none;padding:0;min-height:73px;font-size:14px;line-height:1.6;font-family:inherit;font-weight:400;color:#333;background:transparent;border-radius:0;outline:none;white-space:pre-wrap;word-wrap:break-word;overflow:hidden}
+.compose-prompt .prompt-editor:empty::before{content:attr(data-placeholder);color:#b8c0c8;font-size:14px;line-height:1.6;font-weight:400;pointer-events:none}
+.compose-prompt .prompt-editor .mention{color:#3d9be9;font-weight:500;white-space:nowrap;user-select:all}
+.compose-prompt .prompt-editor .mention[data-type="video"]{color:#e67e22}
+.compose-prompt .prompt-editor .mention[data-type="audio"]{color:#27ae60}
+.mention-inline-thumb{width:18px;height:18px;border-radius:5px;object-fit:cover;vertical-align:text-top;margin-right:3px;margin-left:6px;box-shadow:0 1px 3px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;pointer-events:auto}
+.mention-preview{position:fixed;z-index:2000;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .18s ease,transform .18s ease}
+.mention-preview.visible{opacity:1;transform:translateY(0)}
+.mention-preview img{max-width:126px;max-height:126px;width:auto;height:auto;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.06);display:block}
+/* Mention popup items */
+.mention-item{padding:8px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .1s}
+.mention-item:hover,.mention-item.active{background:#f0f5ff}
+.mention-item img,.mention-item video{width:36px;height:36px;border-radius:8px;object-fit:cover}
+.mention-item .mi-placeholder{width:36px;height:36px;border-radius:8px;background:#f0f2f5;display:flex;align-items:center;justify-content:center;font-size:14px;color:#aaa}
+.mention-item span{font-size:13px;color:#333}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;align-items:center;gap:8px;padding:10px 20px 12px;border-top:none;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid #eceef0;border-radius:12px;background:#fff;font-size:13px;color:#444;cursor:pointer;white-space:nowrap;transition:all .12s;position:relative;user-select:none;line-height:1.2}
+.pill:hover{border-color:#d8dadd;background:#f9fafb}
+.pill.active{border-color:#d0d2d5;background:#f5f6f8}
+.pill-icon{display:flex;align-items:center;color:inherit}
+.pill-icon svg{width:15px;height:15px}
+.pill-chevron{font-size:10px;color:#bbb;margin-left:2px;transition:transform .15s}
+.pill.active .pill-chevron{transform:rotate(180deg)}
+.send-btn{margin-left:auto;width:auto;min-width:36px;height:36px;padding:0 13px;background:#1a1a1a;color:#fff;border:none;border-radius:20px;font-size:12px;font-weight:600;letter-spacing:.3px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;white-space:nowrap}
+.send-btn:hover{background:#333;transform:scale(1.03)}
+.send-btn:disabled{opacity:.3;cursor:default;transform:none}
+.send-btn svg{width:18px;height:18px}
+@keyframes send-pulse{0%{transform:scale(1)}35%{transform:scale(0.86)}70%{transform:scale(1.05)}100%{transform:scale(1)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.send-btn.sending{animation:send-pulse .38s cubic-bezier(.36,.07,.19,.97);pointer-events:none}
+
+
+/* ── Popups ── */
+.popup{display:none;position:absolute;background:#fff;border:1px solid #eee;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:100;min-width:140px}
+.popup.open{display:block}
+.popup-title{padding:12px 16px 6px;font-size:12px;color:#999;font-weight:500}
+.popup-item{padding:10px 16px;font-size:13px;color:#333;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s}
+.popup-item:hover{background:#f6f8fa}
+.popup-item.selected{font-weight:500}
+.popup-item .check{margin-left:auto;color:#333;font-size:16px}
+.popup-item .pi-icon{width:22px;text-align:center;font-size:15px;color:#666;display:flex;align-items:center;justify-content:center}
+/* Ratio popup */
+.ratio-grid{display:flex;gap:0;padding:10px 12px 14px}
+.ratio-opt{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 6px;cursor:pointer;border-radius:10px;transition:background .1s}
+.ratio-opt:hover{background:#f0f2f5}
+.ratio-opt.selected{background:#f0f2f5;font-weight:600}
+.ratio-opt .ro-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center}
+.ratio-opt .ro-shape{border:1.5px solid #555;border-radius:2px}
+.ratio-opt .ro-label{font-size:11px;color:#555}
+/* Duration popup */
+.dur-popup{max-height:320px;overflow-y:auto;padding-bottom:6px}
+.dur-popup .popup-item{padding:10px 20px}
+.dur-popup .popup-item .pi-icon{font-size:14px}
+/* @ mention popup */
+.mention-popup{min-width:200px}
+
+/* ── Tasks ── */
+.sl{font-size:18px;font-weight:600;color:#1a1a1a}
+.task{padding:0;border:1px solid #eceef2;margin-bottom:10px;border-radius:14px;background:#fff;overflow:hidden;transition:border-color .15s}
+.task:hover{border-color:#dde0e5}
+.task-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px 0}
+.task-header-left{display:flex;align-items:center;gap:8px}
+.tid{font-family:ui-monospace,monospace;font-size:11px;color:#aaa;letter-spacing:.3px}
+.st{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;letter-spacing:.2px}
+.st.running{color:#0969da;background:#eef6ff}
+.st.completed{color:#1a7f37;background:#eafbef}
+.st.failed,.st.cancelled{color:#cf222e;background:#fff0f0}
+.st.submitted,.st.processing,.st.whitelisting{color:#9a6700;background:#fef9e7}
+.st.submitting{color:#6e40c9;background:#f5f0ff}
+.task-header-right{display:flex;align-items:center;gap:6px}
+.task-elapsed{font-size:10px;color:#c0c4ca}
+.task-remove{background:none;border:none;font-size:14px;color:#d0d3d8;cursor:pointer;padding:2px 4px;line-height:1;transition:color .12s;border-radius:4px}
+.task-remove:hover{color:#cf222e;background:none}
+.task-body{padding:10px 16px 14px}
+.task-video{height:240px;width:auto;max-width:100%;margin-bottom:10px;display:block;border-radius:10px;border:none;background:#f6f8fa}
+.task-actions{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.task-actions input{flex:1;font-size:11px;padding:5px 10px;border:1px solid #eceef2;border-radius:8px;background:#f9fafb;color:#666;font-family:ui-monospace,monospace}
+.task-actions button,.task-actions a.s{font-size:11px;padding:5px 12px;border-radius:8px;border:1px solid #eceef2;background:#fff;color:#555;transition:all .12s}
+.task-actions button:hover,.task-actions a.s:hover{border-color:#d0d3d8;background:#f9fafb}
+.task-error{padding:8px 12px;background:#fff8f8;border:1px solid #fce0e0;border-radius:8px;font-size:12px;color:#cf222e;line-height:1.5;margin-bottom:10px}
+.task-json{margin:0}
+.task-json summary{font-size:12px;color:#c0c4ca;cursor:pointer}
+.rj{margin-top:6px;font-family:ui-monospace,monospace;font-size:10px;background:#f9fafb;padding:10px;overflow:auto;white-space:pre-wrap;word-break:break-all;max-height:160px;border:1px solid #eceef2;border-radius:8px;color:#666}
+/* ── About Modal ── */
+.about-inner{background:#fff;border-radius:16px;width:100%;max-width:540px;padding:28px;position:relative;margin:0 auto}
+.about-close{position:absolute;top:14px;right:14px;background:none;border:none;font-size:17px;color:#ccc;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px;transition:color .12s}
+.about-close:hover{color:#888;background:none}
+.about-features{border:1px solid #eee;border-radius:12px;overflow:hidden;margin-bottom:16px}
+.about-row{display:flex;padding:11px 16px;border-bottom:1px solid #f2f3f4}
+.about-row:last-child{border-bottom:none}
+.about-row-label{width:116px;font-size:13px;font-weight:500;color:#1a1a1a;flex-shrink:0;padding-top:1px}
+.about-row-desc{font-size:13px;color:#777;line-height:1.55}
+.about-section-title{font-size:11px;font-weight:600;color:#bbb;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.about-prices{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.about-price{text-align:center;padding:10px 6px;background:#f9fafb;border-radius:10px}
+.about-price-tier{font-size:11px;color:#aaa;margin-bottom:3px}
+.about-price-val{font-size:15px;font-weight:600;color:#1a1a1a}
+.about-price-val span{font-size:11px;font-weight:400;color:#bbb}
+.about-example{background:#f9fafb;border-radius:10px;padding:12px 14px}
+.about-example p{font-size:13px;color:#666;line-height:1.65}
+.about-example .mention{color:#3d9be9;font-weight:500}
+/* ── Task Input Summary ── */
+.task-input{padding:10px 12px;background:#f9fafb;border-radius:8px;cursor:pointer;transition:background .15s}
+.task-input:hover{background:#f0f2f6}
+.task-input-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.task-input-reuse{font-size:10px;color:#bbb;display:flex;align-items:center;gap:3px;opacity:0;transition:opacity .15s}
+.task-input:hover .task-input-reuse{opacity:1}
+.task-input-prompt{font-size:13px;color:#555;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
+.task-input-media{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.task-input-thumb{width:36px;height:36px;border-radius:7px;overflow:hidden;border:1px solid #eceef2;flex-shrink:0}
+.task-input-thumb img,.task-input-thumb video{width:100%;height:100%;object-fit:cover}
+.task-input-thumb-icon{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f4f5f7;font-size:14px;color:#ccc}
+.task-input-tags{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.task-input-tag{font-size:10px;padding:2px 7px;border-radius:6px;background:#f0f2f5;color:#999}
+
+/* ── Settings ── */
+.settings{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.settings .f{margin:0;flex:1;min-width:100px}
+.settings label{font-size:11px;color:#999;margin-bottom:2px}
+.f{margin-bottom:12px}
+
+</style>
+</head>
+<body>
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px">
+  <h1 style="margin-bottom:0">Seedance</h1>
+  <span onclick="toggleAbout()" style="font-size:12px;color:#ccc;cursor:pointer;user-select:none" id="about-toggle">关于 ▾</span>
+</div>
+
+<!-- API Settings -->
+<details style="margin-bottom:14px">
+  <summary style="font-size:12px;color:#ccc;cursor:pointer;margin-bottom:8px">API 设置</summary>
+  <div class="settings">
+    <div class="f" style="flex:2"><label>API Key</label><input type="password" id="i-key" placeholder="sk-..."></div>
+    <div class="f" style="flex:2"><label>Base URL</label><input type="text" id="i-base" placeholder="https://www.anyfast.ai"></div>
+  </div>
+  <div class="settings">
+    <label style="margin:0"><input type="checkbox" id="i-search"> 联网搜索</label>
+    <label style="margin:0"><input type="checkbox" id="i-wm"> 水印</label>
+  </div>
+</details>
+
+<!-- Compose Box -->
+<div class="compose" id="compose-box">
+  <div class="compose-body">
+    <!-- All-reference mode -->
+    <div class="media-stack empty-stack" id="media-stack">
+      <div class="add-circle-wrap" id="add-wrap">
+        <div class="add-circle" onclick="pickFile()" id="add-btn">
+          <span>+</span>
+          <span class="add-circle-label">素材</span>
+        </div>
+      </div>
+    </div>
+    <!-- Keyframe mode -->
+    <div class="kf-area" id="kf-area">
+      <div class="kf-card" id="kf-first" onclick="pickKfFile('first')">
+        <span class="kf-plus">+</span>
+        <span class="kf-label">首帧</span>
+      </div>
+      <span class="kf-arrow">⇌</span>
+      <div class="kf-card" id="kf-last" onclick="pickKfFile('last')">
+        <span class="kf-plus">+</span>
+        <span class="kf-label">尾帧</span>
+      </div>
+    </div>
+    <div class="compose-prompt">
+      <div class="prompt-editor" id="i-prompt" contenteditable="true" data-placeholder="上传 1-12 个素材并输入提示词。可混合使用图片、视频和音频。示例：@图片1 模仿 @视频1 的动作，配音参考 @音频1。"></div>
+    </div>
+  </div>
+  <div class="toolbar">
+    <!-- Model -->
+    <div class="pill" onclick="togglePill('model-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+      <span id="model-label">Seedance</span>
+      <input type="hidden" id="i-model" value="seedance">
+    </div>
+    <!-- Reference mode -->
+    <div class="pill" onclick="togglePill('ref-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+      <span id="ref-label">参考</span>
+      <span class="pill-chevron"><svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <input type="hidden" id="i-ref" value="all">
+    </div>
+    <!-- Resolution -->
+    <div class="pill" onclick="togglePill('res-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="12" cy="12" r="3"/></svg></span>
+      <span id="res-label">720p</span>
+      <span class="pill-chevron"><svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
+    <!-- Ratio -->
+    <div class="pill" onclick="togglePill('ratio-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+      <span id="ratio-label">1:1</span>
+      <input type="hidden" id="i-ratio" value="1:1">
+    </div>
+    <!-- Duration -->
+    <div class="pill" onclick="togglePill('dur-popup',this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      <span id="dur-label">15s</span>
+      <input type="hidden" id="i-dur" value="15">
+    </div>
+    <!-- @ mention -->
+    <div class="pill" id="at-pill" onclick="togglePill('mention-popup',this)">@</div>
+    <!-- Send -->
+    <button class="send-btn" onclick="generate()" id="gen-btn" title="Generate">
+      <span id="cost-label">↑</span>
+    </button>
+  </div>
+
+  <!-- Popups (positioned relative to compose) -->
+  <!-- Model popup -->
+  <div class="popup" id="model-popup">
+    <div class="popup-item" data-value="seedance" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9"/></svg></span> Seedance <span class="check" id="chk-seedance">&#x2713;</span></div>
+    <div class="popup-item" data-value="seedance-fast" onclick="selectModel(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Seedance Fast <span class="check" id="chk-seedance-fast" style="display:none">&#x2713;</span></div>
+  </div>
+  <!-- Ref mode popup -->
+  <div class="popup" id="ref-popup">
+    <div class="popup-item selected" data-value="all" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> 参考 <span class="check">&#x2713;</span></div>
+    <div class="popup-item" data-value="keyframes" onclick="selectRef(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/></svg></span> 首尾帧 <span class="check" style="display:none">&#x2713;</span></div>
+  </div>
+  <!-- Ratio popup -->
+  <div class="popup" id="ratio-popup" style="min-width:320px">
+    <div class="popup-title">选择比例</div>
+    <div class="ratio-grid" id="ratio-grid"></div>
+  </div>
+  <!-- Resolution popup -->
+  <div class="popup" id="res-popup">
+    <div class="popup-item selected" data-value="720p" onclick="selectRes(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="12" cy="12" r="3"/></svg></span> 720p <span class="check">&#x2713;</span></div>
+    <div class="popup-item" data-value="480p" onclick="selectRes(this)"><span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="12" cy="12" r="2"/></svg></span> 480p <span class="check" style="display:none">&#x2713;</span></div>
+  </div>
+  <!-- Duration popup -->
+  <div class="popup dur-popup" id="dur-popup" style="min-width:180px">
+    <div class="popup-title">选择视频生成时长</div>
+  </div>
+  <!-- Mention popup -->
+  <div class="popup mention-popup" id="mention-popup" style="min-width:220px">
+    <div class="popup-title">可能@的内容</div>
+    <div id="mention-list"></div>
+  </div>
+</div>
+
+<!-- Resolution (hidden, keep for API) -->
+<input type="hidden" id="i-res" value="720p">
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 4px">
+  <span class="sl" style="margin:0">任务</span>
+  <span onclick="clearTasks()" style="font-size:12px;color:#ccc;cursor:pointer;transition:color .12s" onmouseover="this.style.color='#888'" onmouseout="this.style.color='#ccc'">清空</span>
+</div>
+<div style="font-size:12px;color:#c0c4ca;margin-bottom:10px">视频 12 小时后过期，请及时下载。</div>
+<div id="tasks"><p class="empty">暂无任务</p></div>
+
+<!-- About Modal -->
+<div id="about-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto" onclick="if(event.target===this)toggleAbout()">
+  <div class="about-inner">
+    <button class="about-close" onclick="toggleAbout()">✕</button>
+    <div style="margin-bottom:20px">
+      <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:3px">Seedance 2.0</div>
+      <div style="font-size:13px;color:#aaa">多模态视频生成 · 字节跳动</div>
+    </div>
+    <div class="about-features">
+      <div class="about-row">
+        <div class="about-row-label">参考模式</div>
+        <div class="about-row-desc">最多同时输入 9 张图片、3 个视频和 3 个音频，使用 @ 标签指定每个素材。</div>
+      </div>
+      <div class="about-row">
+        <div class="about-row-label">原生 15 秒</div>
+        <div class="about-row-desc">业界领先的单次 15 秒连贯生成，具备强物理真实感。</div>
+      </div>
+      <div class="about-row">
+        <div class="about-row-label">人脸一致性</div>
+        <div class="about-row-desc">内置人脸保持算法，确保角色在各帧之间保持一致。</div>
+      </div>
+      <div class="about-row">
+        <div class="about-row-label">原生音频</div>
+        <div class="about-row-desc">同步生成匹配的音效和口型同步。</div>
+      </div>
+    </div>
+    <div class="about-section-title">定价</div>
+    <div class="about-prices">
+      <div class="about-price"><div class="about-price-tier">480p T2V</div><div class="about-price-val">$0.12<span>/s</span></div></div>
+      <div class="about-price"><div class="about-price-tier">720p T2V</div><div class="about-price-val">$0.28<span>/s</span></div></div>
+      <div class="about-price"><div class="about-price-tier">480p V2V</div><div class="about-price-val">$0.15<span>/s</span></div></div>
+      <div class="about-price"><div class="about-price-tier">720p V2V</div><div class="about-price-val">$0.33<span>/s</span></div></div>
+    </div>
+    <div class="about-section-title">提示词示例</div>
+    <div class="about-example">
+      <p>参考 <span class="mention">@图片1</span> 的角色特征，复刻 <span class="mention">@视频1</span> 的旋踢动作，场景设定在 <span class="mention">@图片2</span> 的赛博朋克雨夜街道。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+const MAX_TASKS = 50;
+const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+let pollTimer = null;
+const mediaItems = []; // { id, type, url, file, thumbUrl, name }
+let mediaIdCounter = 0;
+let pendingUploads = 0; // Track in-flight uploads
+// Keyframe mode state: { url, thumbUrl, name, file } or null
+let kfFirst = null;
+let kfLast = null;
+
+const ACCEPT = {
+  image: "image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif",
+  video: "video/mp4,video/quicktime,video/webm",
+  audio: "audio/wav,audio/mpeg,audio/mp3"
+};
+const RATIOS = ["21:9","16:9","4:3","1:1","3:4","9:16"];
+const DURATIONS = [5,6,7,8,9,10,11,12,13,14,15];
+// Pricing per second in USD (2x Volcengine list price, CNY÷7.2)
+// T2V/I2V: output tokens × (46×2) CNY/M
+// V2V: (input+output tokens) × (28×2) CNY/M → effective 112 CNY/M per output-second
+const COST_PER_SEC     = { "480p": 0.12, "720p": 0.28 }; // T2V / I2V
+const COST_PER_SEC_VID = { "480p": 0.15, "720p": 0.33 }; // V2V (input+output billed together)
+
+function updateCostLabel() {
+  const res = document.getElementById("i-res")?.value || "720p";
+  const dur = parseInt(document.getElementById("i-dur").value) || 15;
+  const model = document.getElementById("i-model").value;
+  const hasVideo = mediaItems.some(m => m.type === "video" && m.url);
+  const rates = hasVideo ? COST_PER_SEC_VID : COST_PER_SEC;
+  const rate = rates[res] ?? 0.28;
+  const mult = model === "seedance-fast" ? 0.5 : 1;
+  const cost = (rate * dur * mult).toFixed(2);
+  const el = document.getElementById("cost-label");
+  if (el) el.textContent = `↑ $${cost}`;
+}
+const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],"3:4":[18,24],"9:16":[16,28]};
+
+// ── Init ──
+(function init() {
+  const fields = {"i-key":"apiKey","i-base":"apiBase","i-model":"model","i-ratio":"ratio","i-dur":"dur","i-res":"res"};
+  const checks = {"i-search":"webSearch","i-wm":"watermark"};
+  for (const [id,key] of Object.entries(fields)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const v = localStorage.getItem(key);
+    if (v !== null) el.value = v;
+    el.addEventListener("input", () => localStorage.setItem(key, el.value));
+  }
+  for (const [id,key] of Object.entries(checks)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const v = localStorage.getItem(key);
+    if (v !== null) el.checked = v === "true";
+    el.addEventListener("change", () => localStorage.setItem(key, el.checked));
+  }
+  // Restore prompt
+  const savedPrompt = localStorage.getItem("prompt");
+  if (savedPrompt) setPromptText(savedPrompt);
+  // Restore model label
+  const m = document.getElementById("i-model").value;
+  document.getElementById("model-label").textContent = m === "seedance-fast" ? "Seedance Fast" : "Seedance";
+  document.getElementById("chk-seedance").style.display = m === "seedance" ? "" : "none";
+  document.getElementById("chk-seedance-fast").style.display = m === "seedance-fast" ? "" : "none";
+
+  // Restore resolution label
+  const res = document.getElementById("i-res").value || "720p";
+  document.getElementById("res-label").textContent = res;
+  document.querySelectorAll("#res-popup .popup-item").forEach(item => {
+    item.classList.toggle("selected", item.dataset.value === res);
+    const chk = item.querySelector(".check");
+    if (chk) chk.style.display = item.dataset.value === res ? "" : "none";
+  });
+
+  // Restore ratio label
+  const r = document.getElementById("i-ratio").value || "1:1";
+  document.getElementById("ratio-label").textContent = r;
+
+  // Restore duration label
+  const d = document.getElementById("i-dur").value || "15";
+  document.getElementById("dur-label").textContent = d + "s";
+
+  // Build ratio grid
+  buildRatioGrid();
+  // Build duration list
+  buildDurList();
+
+  // Setup prompt editor events
+  const ta = document.getElementById("i-prompt");
+  ta.addEventListener("input", onPromptInput);
+  ta.addEventListener("keydown", onPromptKeydown);
+  // Paste as plain text
+  ta.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    const html = esc(text).replace(/@(图片|视频|音频)(\d+)/g, (match, type, num) => {
+      const mType = type === "图片" ? "image" : type === "视频" ? "video" : "audio";
+      const idx = parseInt(num);
+      let count = 0;
+      const item = mediaItems.find(m => m.type === mType && ++count === idx);
+      const thumb = (item && item.thumbUrl)
+        ? `<img class="mention-inline-thumb" src="${esc(item.thumbUrl)}">`
+        : '';
+      return `<span class="mention" contenteditable="false" data-type="${mType}" data-text="${esc(match)}">${thumb}${match}</span>`;
+    });
+    document.execCommand("insertHTML", false, html);
+  });
+
+  // Pre-fill Base URL default
+  if (!document.getElementById("i-base").value) {
+    document.getElementById("i-base").value = "https://www.anyfast.ai";
+  }
+
+  renderTasks();
+  updateCostLabel();
+  if (tasks.some(t => t.id && !["completed","failed","cancelled"].includes(t.status))) startPolling();
+})();
+
+function buildRatioGrid() {
+  const cur = document.getElementById("i-ratio").value;
+  const g = document.getElementById("ratio-grid");
+  g.innerHTML = RATIOS.map(r => {
+    const [w,h] = RATIO_SHAPES[r];
+    const sel = r === cur ? " selected" : "";
+    return `<div class="ratio-opt${sel}" onclick="selectRatio('${r}')">
+      <div class="ro-icon"><div class="ro-shape" style="width:${w}px;height:${h}px"></div></div>
+      <div class="ro-label">${r}</div>
+    </div>`;
+  }).join("");
+}
+
+function buildDurList() {
+  const cur = parseInt(document.getElementById("i-dur").value);
+  const p = document.getElementById("dur-popup");
+  const title = p.querySelector(".popup-title").outerHTML;
+  p.innerHTML = title + DURATIONS.map(d => {
+    const sel = d === cur ? " selected" : "";
+    return `<div class="popup-item${sel}" onclick="selectDur(${d})">
+      <span class="pi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      ${d}s
+      ${d === cur ? '<span class="check">&#x2713;</span>' : ''}
+    </div>`;
+  }).join("");
+}
+
+// ── Popup management ──
+let openPopup = null;
+let openPill = null;
+
+function closeAllPopups() {
+  document.querySelectorAll(".popup.open").forEach(p => p.classList.remove("open"));
+  document.querySelectorAll(".pill.active").forEach(p => p.classList.remove("active"));
+  openPopup = null;
+  openPill = null;
+}
+
+function togglePill(popupId, pillEl) {
+  const popup = document.getElementById(popupId);
+  if (openPopup === popup) { closeAllPopups(); return; }
+  closeAllPopups();
+
+  // Position popup above the pill
+  if (pillEl) {
+    const compose = document.getElementById("compose-box");
+    const composeRect = compose.getBoundingClientRect();
+    const pillRect = pillEl.getBoundingClientRect();
+    const pillLeft = pillRect.left - composeRect.left;
+    const pillCenter = pillLeft + pillRect.width / 2;
+
+    popup.style.left = "";
+    popup.style.right = "";
+    popup.style.bottom = "";
+
+    // Show temporarily to measure
+    popup.style.visibility = "hidden";
+    popup.classList.add("open");
+    const popupW = popup.offsetWidth;
+    popup.classList.remove("open");
+    popup.style.visibility = "";
+
+    // Center popup on pill, clamp to compose bounds
+    let left = pillCenter - popupW / 2;
+    left = Math.max(8, Math.min(left, composeRect.width - popupW - 8));
+    popup.style.left = left + "px";
+    // Duration popup opens downward, others open upward
+    if (popupId === "dur-popup") {
+      popup.style.bottom = "";
+      popup.style.top = (pillRect.bottom - composeRect.top + 6) + "px";
+    } else {
+      popup.style.top = "";
+      popup.style.bottom = (composeRect.height - pillRect.top + composeRect.top + 6) + "px";
+    }
+
+    pillEl.classList.add("active");
+  }
+
+  popup.classList.add("open");
+  openPopup = popup;
+  openPill = pillEl;
+  if (popupId === "mention-popup") buildMentionList();
+}
+
+document.addEventListener("click", (e) => {
+  if (openPopup && !openPopup.contains(e.target) && (!openPill || !openPill.contains(e.target))) {
+    closeAllPopups();
+  }
+});
+
+function selectModel(el) {
+  const v = el.dataset.value;
+  document.getElementById("i-model").value = v;
+  localStorage.setItem("model", v);
+  document.getElementById("model-label").textContent = v === "seedance-fast" ? "Seedance Fast" : "Seedance";
+  document.getElementById("chk-seedance").style.display = v === "seedance" ? "" : "none";
+  document.getElementById("chk-seedance-fast").style.display = v === "seedance-fast" ? "" : "none";
+  closeAllPopups();
+  updateCostLabel();
+}
+
+function selectRef(el) {
+  const v = el.dataset.value;
+  document.getElementById("i-ref").value = v;
+  const labels = { all:"参考", keyframes:"首尾帧" };
+  document.getElementById("ref-label").textContent = labels[v] || v;
+  document.querySelectorAll("#ref-popup .popup-item").forEach(item => {
+    item.classList.toggle("selected", item.dataset.value === v);
+    item.querySelector(".check").style.display = item.dataset.value === v ? "" : "none";
+  });
+  closeAllPopups();
+  syncRefMode();
+}
+
+function syncRefMode() {
+  const v = document.getElementById("i-ref").value;
+  const isKf = v === "keyframes";
+  document.getElementById("media-stack").style.display = isKf ? "none" : "";
+  document.getElementById("kf-area").classList.toggle("visible", isKf);
+  document.getElementById("i-prompt").setAttribute("data-placeholder", isKf
+    ? "描述两帧之间的动作或平滑过渡。"
+    : "上传 1-12 个素材并输入提示词。可混合使用图片、视频和音频。示例：@图片1 模仿 @视频1 的动作，配音参考 @音频1。");
+  document.getElementById("at-pill").style.display = isKf ? "none" : "";
+}
+
+function selectRes(el) {
+  const v = el.dataset.value;
+  document.getElementById("i-res").value = v;
+  localStorage.setItem("res", v);
+  document.getElementById("res-label").textContent = v;
+  document.querySelectorAll("#res-popup .popup-item").forEach(item => {
+    item.classList.toggle("selected", item.dataset.value === v);
+    item.querySelector(".check").style.display = item.dataset.value === v ? "" : "none";
+  });
+  closeAllPopups();
+  updateCostLabel();
+}
+
+function selectRatio(r) {
+  document.getElementById("i-ratio").value = r;
+  localStorage.setItem("ratio", r);
+  document.getElementById("ratio-label").textContent = r;
+  buildRatioGrid();
+  closeAllPopups();
+}
+
+function selectDur(d) {
+  document.getElementById("i-dur").value = d;
+  localStorage.setItem("dur", String(d));
+  document.getElementById("dur-label").textContent = d + "s";
+  buildDurList();
+  closeAllPopups();
+  updateCostLabel();
+}
+
+function buildMentionList() {
+  const el = document.getElementById("mention-list");
+  if (mediaItems.length === 0) {
+    el.innerHTML = '<div style="padding:10px 16px;color:#aaa;font-size:12px">暂未添加素材</div>';
+    return;
+  }
+  mentionIdx = 0;
+  el.innerHTML = mediaItems.map((m, i) => {
+    const typeLabel = m.type === "image" ? "图片" : m.type === "video" ? "视频" : "音频";
+    const num = mediaItems.filter((x, j) => x.type === m.type && j <= i).length;
+    let thumb = '';
+    if (m.thumbUrl && m.type === "video") {
+      thumb = `<video src="${esc(m.thumbUrl)}" muted style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block"></video>`;
+    } else if (m.thumbUrl) {
+      thumb = `<img src="${esc(m.thumbUrl)}" width="36" height="36" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block">`;
+    } else {
+      const icons = { image: "🖼", video: "🎬", audio: "🎵" };
+      thumb = `<div class="mi-placeholder">${icons[m.type]}</div>`;
+    }
+    const active = i === 0 ? " active" : "";
+    const colorMap = { image: "#3d9be9", video: "#e67e22", audio: "#27ae60" };
+    const tagColor = colorMap[m.type];
+    return `<div class="mention-item${active}" onclick="insertMention('${typeLabel}${num}')">
+      ${thumb}<span style="color:${tagColor};font-weight:500">${typeLabel}${num}</span>
+    </div>`;
+  }).join("");
+}
+
+function showMentionAtCursor() {
+  const popup = document.getElementById("mention-popup");
+  const compose = document.getElementById("compose-box");
+  const composeRect = compose.getBoundingClientRect();
+
+  buildMentionList();
+  closeAllPopups();
+
+  // Position at caret using Selection API
+  const sel = window.getSelection();
+  if (sel.rangeCount) {
+    const range = sel.getRangeAt(0).cloneRange();
+    range.collapse(true);
+    const caretRect = range.getBoundingClientRect();
+    popup.style.left = (caretRect.left - composeRect.left) + "px";
+    popup.style.bottom = "";
+    popup.style.top = (caretRect.bottom - composeRect.top + 4) + "px";
+  }
+
+  popup.classList.add("open");
+  openPopup = popup;
+  openPill = null;
+}
+
+// ── Prompt editor helpers ──
+function getPromptText() {
+  const el = document.getElementById("i-prompt");
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
+      if (node.classList && node.classList.contains("mention")) return NodeFilter.FILTER_ACCEPT;
+      if (node.tagName === "BR") return NodeFilter.FILTER_ACCEPT;
+      return NodeFilter.FILTER_SKIP;
+    }
+  });
+  let text = "";
+  let node;
+  while ((node = walk.nextNode())) {
+    if (node.tagName === "BR") { text += "\n"; continue; }
+    if (node.classList && node.classList.contains("mention")) {
+      text += node.getAttribute("data-text") || node.textContent;
+      walk.nextNode(); // skip children
+      continue;
+    }
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
+  }
+  return text;
+}
+
+function setPromptText(text) {
+  const el = document.getElementById("i-prompt");
+  if (!text) { el.innerHTML = ""; return; }
+  el.innerHTML = esc(text).replace(/@(图片|视频|音频)(\d+)/g, (match, type, num) => {
+    const mType = type === "图片" ? "image" : type === "视频" ? "video" : "audio";
+    const idx = parseInt(num);
+    let count = 0;
+    const item = mediaItems.find(m => m.type === mType && ++count === idx);
+    const thumb = (item && item.thumbUrl)
+      ? `<img class="mention-inline-thumb" src="${esc(item.thumbUrl)}">`
+      : '';
+    return `<span class="mention" contenteditable="false" data-type="${mType}" data-text="${esc(match)}">${thumb}${match}</span>`;
+  });
+}
+
+function buildMentionSpan(label, type, thumbUrl) {
+  const span = document.createElement("span");
+  span.className = "mention";
+  span.contentEditable = "false";
+  span.setAttribute("data-type", type);
+  span.setAttribute("data-text", "@" + label);
+  if (thumbUrl) {
+    const img = document.createElement("img");
+    img.className = "mention-inline-thumb";
+    img.src = thumbUrl;
+    span.appendChild(img);
+  }
+  span.appendChild(document.createTextNode("@" + label));
+  return span;
+}
+
+function insertMention(text) {
+  const el = document.getElementById("i-prompt");
+  const sel = window.getSelection();
+  if (!sel.rangeCount) { el.focus(); return; }
+  const range = sel.getRangeAt(0);
+
+  // Find and remove the preceding "@"
+  const textNode = range.startContainer;
+  if (textNode.nodeType === Node.TEXT_NODE) {
+    const t = textNode.textContent;
+    const offset = range.startOffset;
+    const atIdx = t.lastIndexOf("@", offset - 1);
+    if (atIdx >= 0 && atIdx >= offset - 1) {
+      textNode.textContent = t.slice(0, atIdx) + t.slice(offset);
+      range.setStart(textNode, atIdx);
+      range.collapse(true);
+    }
+  }
+
+  const typeLabel = text;
+  const mType = text.replace(/\d+$/, "").toLowerCase();
+  const idx = parseInt(text.replace(/\D/g, ""));
+  let count = 0;
+  const item = mediaItems.find(m => m.type === mType && ++count === idx);
+
+  const span = buildMentionSpan(text, mType, item?.thumbUrl);
+  range.insertNode(span);
+
+  // Add a space after and move cursor there
+  const space = document.createTextNode("\u00A0");
+  span.after(space);
+  range.setStartAfter(space);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  closeAllPopups();
+  el.focus();
+  savePromptToStorage();
+}
+
+// ── Mention thumb preview ──
+const _preview = document.createElement("div");
+_preview.className = "mention-preview";
+_preview.innerHTML = '<img>';
+document.body.appendChild(_preview);
+
+document.getElementById("i-prompt").addEventListener("mouseover", (e) => {
+  const mention = e.target.closest(".mention");
+  if (!mention) return;
+  const thumb = mention.querySelector(".mention-inline-thumb");
+  if (!thumb) return;
+  const rect = mention.getBoundingClientRect();
+  const pImg = _preview.querySelector("img");
+  pImg.onload = () => {
+    _preview.style.left = (rect.left + rect.width / 2 - pImg.offsetWidth / 2) + "px";
+    _preview.style.top = (rect.top - pImg.offsetHeight - 8) + "px";
+    _preview.classList.add("visible");
+  };
+  pImg.src = thumb.src;
+  if (pImg.complete) pImg.onload();
+});
+document.getElementById("i-prompt").addEventListener("mouseout", (e) => {
+  const mention = e.target.closest(".mention");
+  if (mention || e.target.classList?.contains("mention")) {
+    _preview.classList.remove("visible");
+  }
+});
+
+// ── Prompt helpers (global) ──
+let mentionIdx = 0;
+
+function autoResize() { /* contenteditable grows naturally */ }
+
+function updateHighlight() { /* no longer needed - contenteditable handles display */ }
+
+let isComposing = false;
+document.getElementById("i-prompt").addEventListener("compositionstart", () => { isComposing = true; });
+document.getElementById("i-prompt").addEventListener("compositionend", () => { isComposing = false; onPromptInput(); });
+
+function savePromptToStorage() {
+  localStorage.setItem("prompt", getPromptText());
+}
+
+function onPromptInput() {
+  savePromptToStorage();
+  if (isComposing) return;
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const t = node.textContent;
+    const pos = range.startOffset;
+    if (pos > 0 && t[pos - 1] === "@") {
+      if (mediaItems.length > 0) {
+        mentionIdx = 0;
+        showMentionAtCursor();
+      }
+    } else if (openPopup === document.getElementById("mention-popup")) {
+      closeAllPopups();
+    }
+  } else if (openPopup === document.getElementById("mention-popup")) {
+    closeAllPopups();
+  }
+}
+
+function onPromptKeydown(e) {
+  const popup = document.getElementById("mention-popup");
+  if (!popup.classList.contains("open")) return;
+  const items = popup.querySelectorAll(".mention-item");
+  if (!items.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    mentionIdx = (mentionIdx + 1) % items.length;
+    highlightMentionItem(items);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    mentionIdx = (mentionIdx - 1 + items.length) % items.length;
+    highlightMentionItem(items);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (items[mentionIdx]) items[mentionIdx].click();
+  } else if (e.key === "Escape") {
+    closeAllPopups();
+  }
+}
+
+function highlightMentionItem(items) {
+  items.forEach((el, i) => el.classList.toggle("active", i === mentionIdx));
+}
+
+// ── Media management ──
+const ALL_ACCEPT = [ACCEPT.image, ACCEPT.video, ACCEPT.audio].join(",");
+
+function detectFileType(file) {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  // Fallback: check extension
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (["jpg","jpeg","png","webp","bmp","tiff","gif"].includes(ext)) return "image";
+  if (["mp4","mov","webm","avi","mkv"].includes(ext)) return "video";
+  if (["wav","mp3","aac","ogg","flac","m4a"].includes(ext)) return "audio";
+  return "image"; // default
+}
+
+function pickFile() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ALL_ACCEPT;
+  input.multiple = true;
+  input.onchange = () => {
+    for (const file of input.files) {
+      const type = detectFileType(file);
+      const id = ++mediaIdCounter;
+      // Create local preview URL immediately
+      const thumbUrl = (type === "image" || type === "video") ? URL.createObjectURL(file) : "";
+      const item = { id, type, url: "", thumbUrl, name: file.name, file };
+      mediaItems.push(item);
+      handleFileForItem(id, file);
+    }
+    renderStack();
+  };
+  input.click();
+}
+
+// ── Drag & Drop ──
+const _compose = document.getElementById("compose-box");
+let _dragCount = 0;
+_compose.addEventListener("dragenter", (e) => { e.preventDefault(); _dragCount++; _compose.classList.add("drag-over"); });
+_compose.addEventListener("dragleave", (e) => { e.preventDefault(); if (--_dragCount <= 0) { _dragCount = 0; _compose.classList.remove("drag-over"); } });
+_compose.addEventListener("dragover", (e) => e.preventDefault());
+_compose.addEventListener("drop", (e) => {
+  e.preventDefault();
+  _dragCount = 0;
+  _compose.classList.remove("drag-over");
+  const files = e.dataTransfer.files;
+  if (!files.length) return;
+  for (const file of files) {
+    const type = detectFileType(file);
+    const id = ++mediaIdCounter;
+    const thumbUrl = (type === "image" || type === "video") ? URL.createObjectURL(file) : "";
+    mediaItems.push({ id, type, url: "", thumbUrl, name: file.name, file });
+    handleFileForItem(id, file);
+  }
+  renderStack();
+});
+
+// Keep addMedia for asset library usage
+function addMedia(type) {
+  const id = ++mediaIdCounter;
+  const item = { id, type, url: "", thumbUrl: "", name: "", file: null };
+  mediaItems.push(item);
+  renderStack();
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ACCEPT[type];
+  input.onchange = () => handleFileForItem(id, input.files[0]);
+  input.click();
+}
+
+function removeMediaItem(id) {
+  const idx = mediaItems.findIndex(m => m.id === id);
+  if (idx >= 0) {
+    const item = mediaItems[idx];
+    if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(item.thumbUrl);
+    }
+    mediaItems.splice(idx, 1);
+  }
+  renderStack();
+}
+
+function renderStack() {
+  const container = document.getElementById("media-stack");
+  const addWrap = document.getElementById("add-wrap");
+
+  // Remove old stack-items if exists
+  const old = document.getElementById("stack-items");
+  if (old) old.remove();
+
+  const n = mediaItems.length;
+  if (n === 0) {
+    container.classList.add("empty-stack");
+    return;
+  }
+
+  container.classList.remove("empty-stack");
+
+  // Create stack-items container
+  const stackItems = document.createElement("div");
+  stackItems.className = "stack-items";
+  stackItems.id = "stack-items";
+  container.insertBefore(stackItems, addWrap);
+
+  // Calculate stacked positions
+  const rotations = n === 1 ? [0] : n === 2 ? [-6, 5] : n === 3 ? [-8, 0, 7] : generateRotations(n);
+
+  mediaItems.forEach((item, i) => {
+    const div = document.createElement("div");
+    div.className = "stack-item";
+    div.style.zIndex = i + 1;
+    div.style.transform = `rotate(${rotations[i] || 0}deg)`;
+    // Slight offset for stacking depth
+    const offsetX = (i - (n - 1) / 2) * 4;
+    const offsetY = (n - 1 - i) * 2;
+    div.style.left = offsetX + "px";
+    div.style.top = offsetY + "px";
+
+    let inner = "";
+    if (item.thumbUrl && item.type === "image") {
+      inner = `<img src="${esc(item.thumbUrl)}">`;
+    } else if (item.thumbUrl && item.type === "video") {
+      inner = `<video src="${esc(item.thumbUrl)}" muted></video>`;
+    } else {
+      const icons = { image: "🖼", video: "🎬", audio: "🎵" };
+      inner = `<div class="stack-icon">${icons[item.type]}</div>`;
+    }
+    if (item.type === "video" && item.url) {
+      inner += `<span class="stack-dur">00:${String(parseInt(document.getElementById("i-dur").value)||15).padStart(2,"0")}</span>`;
+    }
+    inner += `<button class="stack-remove" onclick="event.stopPropagation();removeMediaItem(${item.id})">&times;</button>`;
+    div.innerHTML = inner;
+    div.onclick = () => triggerReupload(item.id);
+    stackItems.appendChild(div);
+  });
+  updateCostLabel();
+}
+
+function generateRotations(n) {
+  const r = [];
+  for (let i = 0; i < n; i++) r.push(-10 + (20 / (n - 1)) * i);
+  return r;
+}
+function triggerReupload(id) {
+  const item = mediaItems.find(m => m.id === id);
+  if (!item) return;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ALL_ACCEPT;
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    // Update type based on new file
+    item.type = detectFileType(file);
+    handleFileForItem(id, file);
+  };
+  input.click();
+}
+
+async function handleFileForItem(id, file) {
+  if (!file) return;
+  pendingUploads++;
+  const item = mediaItems.find(m => m.id === id);
+  if (!item) return;
+  item.name = file.name;
+  item.file = file;
+
+  // Local preview (revoke old blob URL to prevent memory leak)
+  if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(item.thumbUrl);
+  }
+  if (item.type === "image" || item.type === "video") {
+    item.thumbUrl = URL.createObjectURL(file);
+  }
+  renderStack();
+
+  try {
+    let fileUrl;
+    if (item.type === "video") {
+      const form = new FormData();
+      form.append("file", file);
+      const resp = await fetch("/api/upload/video", { method: "POST", body: form });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Upload failed: ${resp.status}`);
+      }
+      ({ fileUrl } = await resp.json());
+    } else {
+      const presignResp = await fetch("/api/cos/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type }),
+      });
+      if (!presignResp.ok) throw new Error("Failed to get upload URL");
+      const presign = await presignResp.json();
+      fileUrl = presign.fileUrl;
+      const uploadResp = await fetch(presign.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+    }
+    item.url = fileUrl;
+    item.cosUrl = fileUrl; // Persist COS URL for display (blob URLs expire)
+    console.log(`[Upload] ${item.type} uploaded to COS:`, fileUrl);
+    renderStack();
+  } catch (err) {
+    alert("上传失败，请重试");
+    removeMediaItem(id);
+  } finally {
+    pendingUploads--;
+  }
+}
+
+// ── Keyframe mode ──
+function pickKfFile(which) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ACCEPT.image;
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    // Revoke old blob URL
+    const old = which === "first" ? kfFirst : kfLast;
+    if (old && old.thumbUrl && old.thumbUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(old.thumbUrl);
+    }
+    const thumbUrl = URL.createObjectURL(file);
+    const obj = { url: "", thumbUrl, name: file.name, file };
+    if (which === "first") kfFirst = obj; else kfLast = obj;
+    renderKfCard(which);
+    uploadKfFile(which, file);
+  };
+  input.click();
+}
+
+function removeKf(which, e) {
+  e.stopPropagation();
+  const obj = which === "first" ? kfFirst : kfLast;
+  if (obj && obj.thumbUrl && obj.thumbUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(obj.thumbUrl);
+  }
+  if (which === "first") kfFirst = null; else kfLast = null;
+  renderKfCard(which);
+}
+
+function renderKfCard(which) {
+  const card = document.getElementById(which === "first" ? "kf-first" : "kf-last");
+  const obj = which === "first" ? kfFirst : kfLast;
+  const label = which === "first" ? "首帧" : "尾帧";
+  if (obj && obj.thumbUrl) {
+    card.className = "kf-card has-img";
+    card.innerHTML = `<img src="${esc(obj.thumbUrl)}"><button class="kf-remove" onclick="removeKf('${which}',event)">&times;</button>`;
+  } else {
+    card.className = "kf-card";
+    card.innerHTML = `<span class="kf-plus">+</span><span class="kf-label">${label}</span>`;
+  }
+}
+
+async function uploadKfFile(which, file) {
+  const obj = which === "first" ? kfFirst : kfLast;
+  if (!obj) return;
+  try {
+    const presignResp = await fetch("/api/cos/presign", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: file.name, contentType: file.type }),
+    });
+    if (!presignResp.ok) throw new Error("Failed to get upload URL");
+    const presign = await presignResp.json();
+    const uploadResp = await fetch(presign.uploadUrl, {
+      method: "PUT", headers: { "Content-Type": file.type }, body: file,
+    });
+    if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+    obj.url = presign.fileUrl;
+    obj.cosUrl = presign.fileUrl;
+  } catch (err) {
+    alert("上传失败，请重试");
+    if (which === "first") kfFirst = null; else kfLast = null;
+    renderKfCard(which);
+  }
+}
+
+// ── Build request ──
+function apiHeaders() {
+  const key = document.getElementById("i-key").value.trim();
+  const base = document.getElementById("i-base").value.trim();
+  const h = { "Content-Type": "application/json" };
+  if (key) h["X-Api-Key"] = key;
+  if (base) h["X-Api-Base"] = base;
+  return h;
+}
+
+function buildRequest() {
+  const content = [];
+  const prompt = getPromptText().trim();
+  if (prompt) content.push({ type: "text", text: prompt });
+
+  const refMode = document.getElementById("i-ref").value;
+
+  if (refMode === "keyframes") {
+    // Keyframe mode: use kfFirst / kfLast
+    if (kfFirst && kfFirst.url) {
+      content.push({ type: "image_url", image_url: { url: kfFirst.url }, role: "first_frame" });
+    }
+    if (kfLast && kfLast.url) {
+      content.push({ type: "image_url", image_url: { url: kfLast.url }, role: "last_frame" });
+    }
+  } else {
+    // All-reference mode: use mediaItems stack
+    for (const item of mediaItems) {
+      if (!item.url) continue;
+      if (item.type === "image") {
+        content.push({ type: "image_url", image_url: { url: item.url }, role: "reference_image" });
+      } else if (item.type === "video") {
+        content.push({ type: "video_url", video_url: { url: item.url }, role: "reference_video" });
+      } else if (item.type === "audio") {
+        content.push({ type: "audio_url", audio_url: { url: item.url }, role: "reference_audio" });
+      }
+    }
+  }
+
+  const body = {
+    model: document.getElementById("i-model").value,
+    content,
+    resolution: document.getElementById("i-res").value,
+    ratio: document.getElementById("i-ratio").value,
+    duration: parseInt(document.getElementById("i-dur").value, 10),
+    generate_audio: true,
+    watermark: document.getElementById("i-wm")?.checked || false,
+  };
+  if (document.getElementById("i-search")?.checked) {
+    body.tools = [{ type: "web_search" }];
+  }
+  return body;
+}
+
+// ── Generate ──
+async function generate() {
+  const btn = document.getElementById("gen-btn");
+  // Micro-animation: restart by forcing reflow
+  btn.classList.remove("sending");
+  void btn.offsetWidth;
+  btn.classList.add("sending");
+  btn.disabled = true;
+  try {
+    if (pendingUploads > 0) {
+      while (pendingUploads > 0) await new Promise(r => setTimeout(r, 200));
+    }
+    const apiKey = document.getElementById("i-key").value.trim();
+    if (!apiKey) {
+      btn.disabled = false; btn.classList.remove("sending");
+      showKeyModal(); return;
+    }
+    const refMode = document.getElementById("i-ref").value;
+    const body = buildRequest();
+    console.log("[Generate] Request body:", JSON.stringify(body, null, 2));
+    if (body.content.length === 0) {
+      btn.disabled = false; btn.classList.remove("sending");
+      alert("Please add a prompt or media before generating."); return;
+    }
+    const inputSnapshot = {
+      prompt: getPromptText().trim(),
+      model: document.getElementById("i-model").value,
+      ratio: document.getElementById("i-ratio").value,
+      duration: parseInt(document.getElementById("i-dur").value, 10),
+      refMode,
+      webSearch: document.getElementById("i-search")?.checked || false,
+      watermark: document.getElementById("i-wm")?.checked || false,
+      mediaItems: refMode === "all" ? mediaItems.filter(m => m.url).map(m => ({ type: m.type, url: m.url, cosUrl: m.cosUrl || "", name: m.name })) : [],
+      kfFirst: (kfFirst && kfFirst.url) ? { url: kfFirst.url, cosUrl: kfFirst.cosUrl || "", name: kfFirst.name } : null,
+      kfLast: (kfLast && kfLast.url) ? { url: kfLast.url, cosUrl: kfLast.cosUrl || "", name: kfLast.name } : null,
+    };
+    // Show placeholder task immediately
+    const task = { id: null, status: "submitting", progress: 0, created: Date.now(), response: null, videoUrl: null, pollErrors: 0, input: inputSnapshot };
+    tasks.unshift(task);
+    renderTasks();
+    // Re-enable button after 1.5s regardless of submission result
+    setTimeout(() => { btn.disabled = false; btn.classList.remove("sending"); }, 1500);
+    // Run submission in background (non-blocking)
+    runSubmit(task, body);
+  } catch (err) {
+    btn.disabled = false; btn.classList.remove("sending");
+    alert(friendlyError(err.message));
+  }
+}
+
+async function runSubmit(task, body) {
+  let lastErr = "";
+  let currentBody = body;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`[Generate] Attempt ${attempt}/3...`);
+      const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(currentBody) });
+      const data = await resp.json();
+      const errMsg = data.error?.message || data.message || "";
+      if (!resp.ok || (data.code && data.code !== "success")) {
+        lastErr = errMsg || JSON.stringify(data);
+        console.warn(`[Generate] Attempt ${attempt} failed:`, lastErr);
+        // PrivacyInformation → create assets, update task status, retry
+        if (lastErr.includes("PrivacyInformation") && attempt < 3) {
+          console.log("[Generate] PrivacyInformation detected, creating assets...");
+          task.status = "whitelisting";
+          renderTasks();
+          const imageItems = mediaItems.filter(m => m.type === "image" && m.url && !m.url.startsWith("asset://"));
+          const kfItems = [];
+          if (kfFirst?.url && !kfFirst.url.startsWith("asset://")) kfItems.push(kfFirst);
+          if (kfLast?.url && !kfLast.url.startsWith("asset://")) kfItems.push(kfLast);
+          await Promise.all([
+            ...imageItems.map(async (m) => {
+              try {
+                const id = await createImageAsset(m.cosUrl || m.url, m.name);
+                await new Promise(r => setTimeout(r, 5000)); // let asset process
+                m.url = "asset://" + id;
+              } catch (err) { console.warn("[Generate] Asset creation failed for", m.name, err); }
+            }),
+            ...kfItems.map(async (obj) => {
+              try {
+                const id = await createImageAsset(obj.cosUrl || obj.url, obj.name);
+                await new Promise(r => setTimeout(r, 5000));
+                obj.url = "asset://" + id;
+              } catch (err) { console.warn("[Generate] Asset creation failed for KF", err); }
+            }),
+          ]);
+          currentBody = buildRequest();
+          console.log("[Generate] Retrying with asset URLs...");
+          continue;
+        }
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+      } else {
+        const parsed = parseResponse(data);
+        task.id = parsed.id;
+        task.status = parsed.status;
+        task.progress = parsed.progress;
+        task.response = data;
+        task.videoUrl = parsed.videoUrl;
+        saveTasks(); renderTasks();
+        if (parsed.id) startPolling();
+        return;
+      }
+    } catch (e) {
+      lastErr = e.message;
+      console.warn(`[Generate] Attempt ${attempt} error:`, e.message);
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+    }
+  }
+  // All attempts failed
+  task.status = "failed";
+  task.error = friendlyError(lastErr);
+  task.response = { _error: lastErr };
+  saveTasks(); renderTasks();
+}
+
+// ── Task management ──
+function saveTasks() {
+  const slim = tasks.filter(t => t.id).slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response, input:t.input }));
+  localStorage.setItem("tasks", JSON.stringify(slim));
+}
+
+function startPolling() { if (pollTimer) return; pollTimer = setInterval(pollAll, 15000); }
+
+async function pollAll() {
+  const TERMINAL = ["completed","failed","cancelled"];
+  const running = tasks.filter(t => t.id && !TERMINAL.includes(t.status));
+  if (running.length === 0) { clearInterval(pollTimer); pollTimer = null; saveTasks(); renderTasks(); return; }
+  let changed = false;
+  for (const task of running) {
+    try {
+      const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
+      const data = await resp.json();
+      task.response = data;
+      if (resp.ok && data.code !== "fail_to_fetch_task") {
+        const parsed = parseResponse(data);
+        if (task.status !== parsed.status || task.progress !== parsed.progress || (!task.videoUrl && parsed.videoUrl)) changed = true;
+        task.status = parsed.status; task.progress = parsed.progress;
+        if (!task.videoUrl) task.videoUrl = parsed.videoUrl;
+        task.pollErrors = 0;
+        if (TERMINAL.includes(task.status) && !task.endTime) task.endTime = Date.now();
+      } else {
+        task.pollErrors = (task.pollErrors||0)+1;
+        if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
+      }
+    } catch(e) {
+      task.pollErrors = (task.pollErrors||0)+1;
+      if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
+    }
+  }
+  saveTasks();
+  if (changed) renderTasks();
+}
+
+const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"failed","CANCELLED":"cancelled","running":"running","completed":"completed","failed":"failed","cancelled":"cancelled","submitted":"submitted"};
+
+function parseResponse(raw) {
+  const wrap = raw.data||raw; const inner = wrap.data||wrap;
+  return { id: wrap.task_id||inner.id||raw.id, status: STATUS_MAP[wrap.status||inner.status||raw.status||"submitted"]||(wrap.status||"submitted").toLowerCase(), progress: wrap.progress||null, videoUrl: findVideoUrl(raw) };
+}
+
+function findVideoUrl(d) {
+  if(d.video?.url)return d.video.url; if(d.video_result?.[0]?.url)return d.video_result[0].url; if(d.output?.video_url)return d.output.video_url;
+  const m=JSON.stringify(d).match(/(https?:\/\/[^"\\]+\.mp4[^"\\]*)/); return m?m[1]:null;
+}
+
+function fmtTime(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000),m=Math.floor(s/60);return m>0?`${m}m ${s%60}s`:`${s}s`}
+function elapsed(t){return fmtTime((t.endTime||Date.now())-t.created)}
+
+function renderTaskInput(t) {
+  if (!t.input) return '';
+  const inp = t.input;
+  let h = `<div class="task-input" onclick="restoreInput('${escJs(t.id||'')}')">`;
+  h += `<div class="task-input-header"><span style="font-size:10px;color:#c0c4ca;letter-spacing:.3px">输入</span><span class="task-input-reuse"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg> 复用</span></div>`;
+  if (inp.prompt) {
+    h += `<div class="task-input-prompt">${esc(inp.prompt)}</div>`;
+  }
+  // Thumbnails
+  const thumbs = [];
+  if (inp.refMode === 'keyframes') {
+    if (inp.kfFirst) thumbs.push({ type:'image', url:inp.kfFirst.cosUrl||inp.kfFirst.url, label:'首帧' });
+    if (inp.kfLast) thumbs.push({ type:'image', url:inp.kfLast.cosUrl||inp.kfLast.url, label:'尾帧' });
+  } else if (inp.mediaItems && inp.mediaItems.length) {
+    for (const m of inp.mediaItems) thumbs.push({ type:m.type, url:m.cosUrl||m.url, label:m.name });
+  }
+  if (thumbs.length) {
+    h += '<div class="task-input-media">';
+    for (const th of thumbs) {
+      if (!th.url) continue;
+      h += '<div class="task-input-thumb">';
+      if (th.type === 'video') {
+        h += `<video src="${esc(th.url)}" muted preload="metadata" title="${esc(th.label)}"></video>`;
+      } else if (th.type === 'image') {
+        h += `<img src="${esc(th.url)}" loading="lazy" title="${esc(th.label)}" onerror="this.parentNode.innerHTML='<div class=\\'task-input-thumb-icon\\'>🖼</div>'">`;
+      } else {
+        h += `<div class="task-input-thumb-icon" title="${esc(th.label)}">🎵</div>`;
+      }
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+  // Tags
+  const ml = inp.model === 'seedance-fast' ? 'Fast' : '2.0';
+  const rl = inp.refMode === 'keyframes' ? '首尾帧' : '参考';
+  h += `<div class="task-input-tags"><span class="task-input-tag">${esc(ml)}</span><span class="task-input-tag">${esc(rl)}</span>${inp.ratio?`<span class="task-input-tag">${esc(inp.ratio)}</span>`:""}<span class="task-input-tag">${inp.duration||""}s</span></div>`;
+  return h + '</div>';
+}
+
+function restoreInput(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  if (!task || !task.input) return;
+  const inp = task.input;
+
+  // Model
+  document.getElementById("i-model").value = inp.model || "seedance";
+  localStorage.setItem("model", inp.model || "seedance");
+  document.getElementById("model-label").textContent = inp.model === "seedance-fast" ? "Seedance Fast" : "Seedance";
+  document.getElementById("chk-seedance").style.display = inp.model === "seedance" ? "" : "none";
+  document.getElementById("chk-seedance-fast").style.display = inp.model === "seedance-fast" ? "" : "none";
+
+  // Ratio & Duration (reuse existing functions which also update UI + localStorage)
+  selectRatio(inp.ratio || "1:1");
+  selectDur(inp.duration || 15);
+
+  // Ref mode
+  document.getElementById("i-ref").value = inp.refMode || "all";
+  const refLabels = { all:"参考", keyframes:"首尾帧" };
+  document.getElementById("ref-label").textContent = refLabels[inp.refMode] || "参考";
+  document.querySelectorAll("#ref-popup .popup-item").forEach(item => {
+    item.classList.toggle("selected", item.dataset.value === inp.refMode);
+    item.querySelector(".check").style.display = item.dataset.value === inp.refMode ? "" : "none";
+  });
+  syncRefMode();
+
+  // Checkboxes
+  const se = document.getElementById("i-search");
+  if (se) { se.checked = inp.webSearch || false; localStorage.setItem("webSearch", se.checked); }
+  const wm = document.getElementById("i-wm");
+  if (wm) { wm.checked = inp.watermark || false; localStorage.setItem("watermark", wm.checked); }
+
+  // Clear existing media
+  for (const m of mediaItems) {
+    if (m.thumbUrl && m.thumbUrl.startsWith("blob:")) URL.revokeObjectURL(m.thumbUrl);
+  }
+  mediaItems.length = 0;
+  if (kfFirst && kfFirst.thumbUrl && kfFirst.thumbUrl.startsWith("blob:")) URL.revokeObjectURL(kfFirst.thumbUrl);
+  if (kfLast && kfLast.thumbUrl && kfLast.thumbUrl.startsWith("blob:")) URL.revokeObjectURL(kfLast.thumbUrl);
+  kfFirst = null;
+  kfLast = null;
+
+  // Restore media
+  if (inp.refMode === "all" && inp.mediaItems) {
+    for (const m of inp.mediaItems) {
+      mediaItems.push({
+        id: ++mediaIdCounter,
+        type: m.type,
+        url: m.url,
+        thumbUrl: m.cosUrl || m.url,
+        cosUrl: m.cosUrl || "",
+        name: m.name,
+        file: null
+      });
+    }
+  }
+  renderStack();
+
+  // Restore keyframes
+  if (inp.refMode === "keyframes") {
+    if (inp.kfFirst) {
+      kfFirst = { url: inp.kfFirst.url, thumbUrl: inp.kfFirst.cosUrl || inp.kfFirst.url, cosUrl: inp.kfFirst.cosUrl || "", name: inp.kfFirst.name, file: null };
+      renderKfCard("first");
+    }
+    if (inp.kfLast) {
+      kfLast = { url: inp.kfLast.url, thumbUrl: inp.kfLast.cosUrl || inp.kfLast.url, cosUrl: inp.kfLast.cosUrl || "", name: inp.kfLast.name, file: null };
+      renderKfCard("last");
+    }
+  }
+
+  // Prompt (after media restored so thumbnails resolve)
+  setPromptText(inp.prompt || "");
+
+  // Scroll to compose box
+  document.getElementById("compose-box").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderTasks() {
+  const c = document.getElementById("tasks");
+  if (!tasks.length) { c.innerHTML = '<p class="empty">暂无任务</p>'; return; }
+  const SL = {submitting:"提交中",whitelisting:"处理中",submitted:"已提交",processing:"生成中",running:"生成中",completed:"完成",failed:"失败",cancelled:"已取消"};
+  c.innerHTML = tasks.map(t => {
+    const isLive = t.status === "submitting" || t.status === "whitelisting";
+    const liveIcon = isLive ? `<span style="display:inline-block;width:8px;height:8px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:3px"></span>` : "";
+    const key = t.id || ("_" + t.created);
+    let h = `<div class="task" id="task-${key}">`;
+    h += `<div class="task-header"><div class="task-header-left"><span class="st ${t.status}">${liveIcon}${SL[t.status]||t.status}</span><span class="tid">${t.id||""}</span>${t.progress?`<span style="font-size:10px;color:#0969da">${t.progress}</span>`:""}</div>`;
+    h += `<div class="task-header-right"><span class="task-elapsed" data-elapsed="${key}">${elapsed(t)}</span><button class="task-remove" onclick="removeTask('${escJs(key)}')" title="删除">×</button></div></div>`;
+    h += `<div class="task-body">`;
+    h += renderTaskInput(t);
+    if (t.error) {
+      h += `<div class="task-error">${esc(t.error)}</div>`;
+    }
+    if (t.videoUrl) {
+      h += `<video class="task-video" src="${esc(t.videoUrl)}" controls preload="metadata"></video>`;
+      h += `<div class="task-actions"><input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()"><button onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">复制</button><a href="${esc(t.videoUrl)}" target="_blank" download class="s">下载</a></div>`;
+    }
+    h += `<details class="task-json"><summary>响应数据</summary><div class="rj">${esc(JSON.stringify(t.response,null,2))}</div></details>`;
+    h += `</div></div>`;
+    return h;
+  }).join("");
+}
+
+function removeTask(key) {
+  const idx = tasks.findIndex(t => (t.id || ("_" + t.created)) === key);
+  if (idx < 0) return;
+  tasks.splice(idx, 1);
+  saveTasks();
+  renderTasks();
+}
+function clearTasks(){if(!confirm("确认清空所有任务记录？"))return;tasks.length=0;saveTasks();renderTasks()}
+function friendlyError(msg) {
+  if (!msg) return "生成失败，请重试";
+  if (msg.includes("timeout") || msg.includes("Timeout")) return "服务繁忙，请稍后重试";
+  if (msg.includes("resolve asset")) return "素材处理中，请稍后重试";
+  if (msg.includes("image_url")) return "图片处理异常，请重新上传图片后重试";
+  if (msg.includes("SensitiveContent") || msg.includes("PrivacyInformation")) return "图片内容不符合规范，请更换图片";
+  if (msg.includes("content moderation")) return "内容审核未通过，请调整提示词或素材";
+  if (msg.includes("rate limit") || msg.includes("RateLimit")) return "请求过于频繁，请稍后重试";
+  if (msg.includes("401") || msg.includes("Unauthorized")) return "API Key 无效，请检查设置";
+  if (msg.includes("NetworkError") || msg.includes("Failed to fetch")) return "网络连接失败，请检查网络";
+  // Truncate long technical messages
+  if (msg.length > 80) return "生成失败：" + msg.slice(0, 60) + "...";
+  return "生成失败：" + msg;
+}
+function esc(s){const d=document.createElement("div");d.textContent=s==null?"":s;return d.innerHTML}
+function escJs(s){return (s==null?"":String(s)).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"')}
+
+setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const key=el.dataset.elapsed;const task=tasks.find(t=>(t.id||("_"+t.created))===key);if(task&&!task.endTime)el.textContent=elapsed(task)})},1000);
+
+// ── Auto Asset Creation ──
+let cachedGroupId = null;
+let cachedGroupCount = 0;
+let groupLockPromise = null; // Prevent concurrent group lookups
+
+const ASSET_BASE = "https://www.anyfast.ai";
+
+async function assetCall(action, body) {
+  const key = document.getElementById("i-key").value.trim();
+  const base = document.getElementById("i-base").value.trim() || ASSET_BASE;
+  if (!key) throw new Error("API Key required for asset creation");
+  const url = `${base}/volc/asset/${action}`;
+  console.log(`[Asset API] POST ${url}`);
+  const payload = { model: "volc-asset", ...body };
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const text = await resp.text();
+  console.log(`[Asset API] ${action} status=${resp.status}:`, text.slice(0, 200));
+  let data;
+  try { data = JSON.parse(text); } catch (e) {
+    throw new Error(`Asset API returned non-JSON (status ${resp.status}): ${text.slice(0, 100)}`);
+  }
+  if (data.ResponseMetadata?.Error) throw new Error(data.ResponseMetadata.Error.Message || "Asset API error");
+  if (data.error) throw new Error(data.error.message || data.error);
+  return data.Result || data;
+}
+
+async function ensureAssetGroup() {
+  // Use cached group if available and has space
+  if (cachedGroupId && cachedGroupCount < 64) return cachedGroupId;
+
+  // Lock: if another call is already finding/creating a group, wait for it
+  if (groupLockPromise) {
+    await groupLockPromise;
+    if (cachedGroupId && cachedGroupCount < 64) return cachedGroupId;
+  }
+
+  let resolve;
+  groupLockPromise = new Promise(r => { resolve = r; });
+
+  try {
+    const list = await assetCall("ListAssetGroups", {
+      Filter: {}, PageNumber: 1, PageSize: 100
+    });
+    const groups = (list.Items || []).filter(g => !g.Name?.startsWith("__del__"));
+    console.log("[Asset] Found groups:", groups.length);
+
+    for (const g of groups) {
+      const assets = await assetCall("ListAssets", {
+        Filter: { GroupIds: [g.Id], GroupType: "AIGC" }, PageNumber: 1, PageSize: 1
+      });
+      const count = assets.TotalCount || 0;
+      console.log(`[Asset] Group ${g.Id} (${g.Name}): ${count}/64 assets`);
+      if (count < 64) {
+        cachedGroupId = g.Id;
+        cachedGroupCount = count;
+        return g.Id;
+      }
+    }
+
+    console.log("[Asset] No group with space, creating new one...");
+    const name = "auto-assets-" + Date.now();
+    const created = await assetCall("CreateAssetGroup", { Name: name, GroupType: "AIGC" });
+    cachedGroupId = created.Id;
+    cachedGroupCount = 0;
+    return created.Id;
+  } finally {
+    groupLockPromise = null;
+    resolve();
+  }
+}
+
+// Queue asset creation to avoid race conditions
+let assetQueue = Promise.resolve();
+
+async function createImageAsset(cosUrl, name) {
+  // Chain asset creations sequentially to avoid concurrent group issues
+  const result = await (assetQueue = assetQueue.then(async () => {
+    const groupId = await ensureAssetGroup();
+    const res = await assetCall("CreateAsset", {
+      GroupId: groupId, URL: cosUrl, AssetType: "Image", Name: (name || "image").slice(0, 60)
+    });
+    cachedGroupCount++;
+    return res;
+  }));
+  return result.Id;
+}
+
+function toggleAbout() {
+  const sec = document.getElementById("about-modal");
+  const btn = document.getElementById("about-toggle");
+  const open = sec.style.display === "none";
+  sec.style.display = open ? "flex" : "none";
+  btn.textContent = open ? "关于 ▴" : "关于 ▾";
+}
+
+function showKeyModal() {
+  document.getElementById("key-modal-ov").style.display = "flex";
+  setTimeout(() => document.getElementById("modal-key-input").focus(), 50);
+}
+function closeKeyModal() {
+  document.getElementById("key-modal-ov").style.display = "none";
+  document.getElementById("modal-key-input").value = "";
+}
+function saveKeyAndGenerate() {
+  const key = document.getElementById("modal-key-input").value.trim();
+  if (!key) { document.getElementById("modal-key-input").focus(); return; }
+  document.getElementById("i-key").value = key;
+  localStorage.setItem("apiKey", key);
+  closeKeyModal();
+  generate();
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("key-modal-ov").style.display === "flex") closeKeyModal();
+});
+</script>
+
+<!-- API Key Modal -->
+<div id="key-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeKeyModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px 24px;width:360px;max-width:90vw;box-shadow:0 12px 40px rgba(0,0,0,.18)">
+    <div style="font-size:16px;font-weight:600;margin-bottom:6px">请输入 API Key</div>
+    <div style="font-size:13px;color:#666;margin-bottom:16px">还没有？<a href="https://www.anyfast.ai/register" target="_blank" style="color:#1a1a1a;font-weight:500;text-decoration:underline">免费获取 API Key →</a></div>
+    <input type="password" id="modal-key-input" placeholder="sk-..." style="width:100%;padding:8px 12px;border:1px solid #e0e0e0;border-radius:8px;font:inherit;font-size:13px;margin-bottom:14px;box-sizing:border-box" onkeydown="if(event.key==='Enter')saveKeyAndGenerate()">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="s" onclick="closeKeyModal()">取消</button>
+      <button onclick="saveKeyAndGenerate()">保存并继续</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
