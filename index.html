@@ -61,7 +61,7 @@ a.s:hover{border-color:#999}
 .kf-arrow{font-size:16px;color:#c0c4ca;user-select:none}
 /* Prompt area - use contenteditable for inline highlights */
 .compose-prompt{flex:1;padding-top:4px;position:relative}
-.compose-prompt .prompt-editor{border:none;padding:0;min-height:73px;font-size:14px;line-height:1.6;font-family:inherit;font-weight:400;color:#333;background:transparent;border-radius:0;outline:none;white-space:pre-wrap;word-wrap:break-word;overflow:hidden}
+.compose-prompt .prompt-editor{border:none;padding:0;min-height:73px;font-size:14px;line-height:1.6;font-family:inherit;font-weight:400;color:#333;background:transparent;border-radius:0;outline:none;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
 .compose-prompt .prompt-editor:empty::before{content:attr(data-placeholder);color:#b8c0c8;font-size:14px;line-height:1.6;font-weight:400;pointer-events:none}
 .compose-prompt .prompt-editor .mention{color:#3d9be9;font-weight:500;white-space:nowrap;user-select:all}
 .compose-prompt .prompt-editor .mention[data-type="video"]{color:#e67e22}
