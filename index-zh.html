@@ -299,7 +299,7 @@ a.s:hover{border-color:#999}
     <div class="popup-title">选择视频生成时长</div>
   </div>
   <!-- Mention popup -->
-  <div class="popup mention-popup" id="mention-popup" style="min-width:220px">
+  <div class="popup mention-popup" id="mention-popup" style="min-width:220px" onmousedown="event.preventDefault()">
     <div class="popup-title">可能@的内容</div>
     <div id="mention-list"></div>
   </div>
@@ -737,10 +737,17 @@ function buildMentionSpan(label, type, thumbUrl) {
   return span;
 }
 
+let _savedRange = null;
+
 function insertMention(text) {
   const el = document.getElementById("i-prompt");
+  el.focus();
   const sel = window.getSelection();
-  if (!sel.rangeCount) { el.focus(); return; }
+  if (_savedRange) {
+    sel.removeAllRanges();
+    sel.addRange(_savedRange);
+  }
+  if (!sel.rangeCount) return;
   const range = sel.getRangeAt(0);
 
   // Find and remove the preceding "@"
@@ -816,6 +823,12 @@ function updateHighlight() { /* no longer needed - contenteditable handles displ
 let isComposing = false;
 document.getElementById("i-prompt").addEventListener("compositionstart", () => { isComposing = true; });
 document.getElementById("i-prompt").addEventListener("compositionend", () => { isComposing = false; onPromptInput(); });
+document.addEventListener("selectionchange", () => {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const el = document.getElementById("i-prompt");
+  if (el.contains(sel.anchorNode)) _savedRange = sel.getRangeAt(0).cloneRange();
+});
 
 function savePromptToStorage() {
   localStorage.setItem("prompt", getPromptText());
