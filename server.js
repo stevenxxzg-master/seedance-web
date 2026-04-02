@@ -191,9 +191,10 @@ app.post("/api/upload/video", upload.single("file"), async (req, res) => {
 
     const ffArgs = ["-i", inputPath, "-y"];
 
-    // Trim duration if needed
+    // Trim duration if needed — take the last MAX_DURATION seconds
     if (duration > MAX_DURATION) {
-      ffArgs.push("-t", String(MAX_DURATION));
+      const startTime = duration - MAX_DURATION;
+      ffArgs.push("-ss", String(startTime), "-t", String(MAX_DURATION));
     }
 
     // Scale down if pixel count exceeds limit

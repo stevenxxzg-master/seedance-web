@@ -60,11 +60,15 @@ a.s:hover{border-color:#999}
 .kf-arrow{font-size:16px;color:#c0c4ca;user-select:none}
 /* Prompt area - use contenteditable for inline highlights */
 .compose-prompt{flex:1;padding-top:4px;position:relative}
-.compose-prompt textarea{border:none;padding:0;min-height:73px;font-size:14px;line-height:1.6;font-family:inherit;font-weight:400;resize:none;color:transparent;caret-color:#333;background:transparent;border-radius:0;overflow:hidden;position:relative;z-index:2}
-.compose-prompt textarea::placeholder{color:#b8c0c8;font-size:14px;line-height:1.6;font-weight:400;font-family:inherit}
-.compose-prompt textarea:focus{outline:none}
-.prompt-highlight{position:absolute;top:4px;left:0;right:0;padding:0;font-size:14px;line-height:1.6;color:#333;white-space:pre-wrap;word-wrap:break-word;pointer-events:none;z-index:1;font-family:inherit}
-.prompt-highlight .mention{color:#3d9be9;font-weight:500}
+.compose-prompt .prompt-editor{border:none;padding:0;min-height:73px;font-size:14px;line-height:1.6;font-family:inherit;font-weight:400;color:#333;background:transparent;border-radius:0;outline:none;white-space:pre-wrap;word-wrap:break-word;overflow:hidden}
+.compose-prompt .prompt-editor:empty::before{content:attr(data-placeholder);color:#b8c0c8;font-size:14px;line-height:1.6;font-weight:400;pointer-events:none}
+.compose-prompt .prompt-editor .mention{color:#3d9be9;font-weight:500;white-space:nowrap;user-select:all}
+.compose-prompt .prompt-editor .mention[data-type="video"]{color:#e67e22}
+.compose-prompt .prompt-editor .mention[data-type="audio"]{color:#27ae60}
+.mention-inline-thumb{width:18px;height:18px;border-radius:5px;object-fit:cover;vertical-align:text-top;margin-right:3px;margin-left:6px;box-shadow:0 1px 3px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;pointer-events:auto}
+.mention-preview{position:fixed;z-index:2000;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .18s ease,transform .18s ease}
+.mention-preview.visible{opacity:1;transform:translateY(0)}
+.mention-preview img{max-width:126px;max-height:126px;width:auto;height:auto;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.06);display:block}
 /* Mention popup items */
 .mention-item{padding:8px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .1s}
 .mention-item:hover,.mention-item.active{background:#f0f5ff}
@@ -213,8 +217,7 @@ details summary{font-size:11px;color:#999;cursor:pointer}
       </div>
     </div>
     <div class="compose-prompt">
-      <div class="prompt-highlight" id="prompt-highlight"></div>
-      <textarea id="i-prompt" placeholder="Upload 1-12 assets and enter your prompt. Mix and match images, text, audio, and video to define stunning interactions. Example: @Image1 mimics the motion of @Video1, with voice reference from @Audio1." rows="2"></textarea>
+      <div class="prompt-editor" id="i-prompt" contenteditable="true" data-placeholder="Upload 1-12 assets and enter your prompt. Mix images, video, and audio. Example: @Image1 mimics the motion of @Video1, with voice from @Audio1."></div>
     </div>
   </div>
   <div class="toolbar">
@@ -380,7 +383,7 @@ const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],
 
 // ── Init ──
 (function init() {
-  const fields = {"i-key":"apiKey","i-base":"apiBase","i-model":"model","i-ratio":"ratio","i-dur":"dur","i-prompt":"prompt","i-res":"res"};
+  const fields = {"i-key":"apiKey","i-base":"apiBase","i-model":"model","i-ratio":"ratio","i-dur":"dur","i-res":"res"};
   const checks = {"i-search":"webSearch","i-wm":"watermark"};
   for (const [id,key] of Object.entries(fields)) {
     const el = document.getElementById(id);
@@ -396,6 +399,9 @@ const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],
     if (v !== null) el.checked = v === "true";
     el.addEventListener("change", () => localStorage.setItem(key, el.checked));
   }
+  // Restore prompt
+  const savedPrompt = localStorage.getItem("prompt");
+  if (savedPrompt) setPromptText(savedPrompt);
   // Restore model label
   const m = document.getElementById("i-model").value;
   document.getElementById("model-label").textContent = m === "seedance-fast" ? "Seedance Fast" : "Seedance";
@@ -424,13 +430,16 @@ const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],
   // Build duration list
   buildDurList();
 
-  // Setup textarea events
+  // Setup prompt editor events
   const ta = document.getElementById("i-prompt");
   ta.addEventListener("input", onPromptInput);
-  ta.addEventListener("scroll", () => {
-    document.getElementById("prompt-highlight").scrollTop = ta.scrollTop;
-  });
   ta.addEventListener("keydown", onPromptKeydown);
+  // Paste as plain text
+  ta.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+  });
 
   // Pre-fill Base URL default
   if (!document.getElementById("i-base").value) {
@@ -561,9 +570,9 @@ function syncRefMode() {
   const isKf = v === "keyframes";
   document.getElementById("media-stack").style.display = isKf ? "none" : "";
   document.getElementById("kf-area").classList.toggle("visible", isKf);
-  document.getElementById("i-prompt").placeholder = isKf
-    ? "Describe the scene, motion, style, etc. E.g.: A 3D cartoon boy skateboarding in the park."
-    : "Upload 1-12 assets and enter your prompt. Mix and match images, text, audio, and video to define stunning interactions. Example: @Image1 mimics the motion of @Video1, with voice reference from @Audio1.";
+  document.getElementById("i-prompt").setAttribute("data-placeholder", isKf
+    ? "Describe the action or smooth transition between these two frames."
+    : "Upload 1-12 assets and enter your prompt. Mix images, video, and audio. Example: @Image1 mimics the motion of @Video1, with voice from @Audio1.");
   document.getElementById("at-pill").style.display = isKf ? "none" : "";
 }
 
@@ -605,7 +614,7 @@ function buildMentionList() {
   }
   mentionIdx = 0;
   el.innerHTML = mediaItems.map((m, i) => {
-    const typeLabel = m.type === "image" ? "图片" : m.type === "video" ? "视频" : "音频";
+    const typeLabel = m.type === "image" ? "Image" : m.type === "video" ? "Video" : "Audio";
     const num = mediaItems.filter((x, j) => x.type === m.type && j <= i).length;
     let thumb = '';
     if (m.thumbUrl && m.type === "video") {
@@ -628,75 +637,184 @@ function buildMentionList() {
 function showMentionAtCursor() {
   const popup = document.getElementById("mention-popup");
   const compose = document.getElementById("compose-box");
-  const ta = document.getElementById("i-prompt");
   const composeRect = compose.getBoundingClientRect();
-  const taRect = ta.getBoundingClientRect();
 
   buildMentionList();
   closeAllPopups();
 
-  // Position near the textarea
-  popup.style.left = (taRect.left - composeRect.left) + "px";
-  popup.style.bottom = "";
-  popup.style.top = (taRect.bottom - composeRect.top + 4) + "px";
+  // Position at caret using Selection API
+  const sel = window.getSelection();
+  if (sel.rangeCount) {
+    const range = sel.getRangeAt(0).cloneRange();
+    range.collapse(true);
+    const caretRect = range.getBoundingClientRect();
+    popup.style.left = (caretRect.left - composeRect.left) + "px";
+    popup.style.bottom = "";
+    popup.style.top = (caretRect.bottom - composeRect.top + 4) + "px";
+  }
 
   popup.classList.add("open");
   openPopup = popup;
   openPill = null;
 }
 
-function insertMention(text) {
-  const ta = document.getElementById("i-prompt");
-  const pos = ta.selectionStart;
-  const v = ta.value;
-  const before = v.slice(0, pos);
-  const atIdx = before.lastIndexOf("@");
-  const start = (atIdx >= 0 && atIdx >= pos - 1) ? atIdx : pos;
-  const insert = "@" + text + " ";
-  ta.value = v.slice(0, start) + insert + v.slice(pos);
-  ta.selectionStart = ta.selectionEnd = start + insert.length;
-  closeAllPopups();
-  // Force immediate update
-  updateHighlight();
-  autoResize();
-  ta.focus();
+// ── Prompt editor helpers ──
+function getPromptText() {
+  const el = document.getElementById("i-prompt");
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
+      if (node.classList && node.classList.contains("mention")) return NodeFilter.FILTER_ACCEPT;
+      if (node.tagName === "BR") return NodeFilter.FILTER_ACCEPT;
+      return NodeFilter.FILTER_SKIP;
+    }
+  });
+  let text = "";
+  let node;
+  while ((node = walk.nextNode())) {
+    if (node.tagName === "BR") { text += "\n"; continue; }
+    if (node.classList && node.classList.contains("mention")) {
+      text += node.getAttribute("data-text") || node.textContent;
+      walk.nextNode(); // skip children
+      continue;
+    }
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
+  }
+  return text;
 }
+
+function setPromptText(text) {
+  const el = document.getElementById("i-prompt");
+  if (!text) { el.innerHTML = ""; return; }
+  el.innerHTML = esc(text).replace(/@(Image|Video|Audio)(\d+)/g, (match, type, num) => {
+    const mType = type.toLowerCase();
+    const idx = parseInt(num);
+    let count = 0;
+    const item = mediaItems.find(m => m.type === mType && ++count === idx);
+    const thumb = (item && item.thumbUrl)
+      ? `<img class="mention-inline-thumb" src="${esc(item.thumbUrl)}">`
+      : '';
+    return `<span class="mention" contenteditable="false" data-type="${mType}" data-text="${esc(match)}">${thumb}${match}</span>`;
+  });
+}
+
+function buildMentionSpan(label, type, thumbUrl) {
+  const span = document.createElement("span");
+  span.className = "mention";
+  span.contentEditable = "false";
+  span.setAttribute("data-type", type);
+  span.setAttribute("data-text", "@" + label);
+  if (thumbUrl) {
+    const img = document.createElement("img");
+    img.className = "mention-inline-thumb";
+    img.src = thumbUrl;
+    span.appendChild(img);
+  }
+  span.appendChild(document.createTextNode("@" + label));
+  return span;
+}
+
+function insertMention(text) {
+  const el = document.getElementById("i-prompt");
+  const sel = window.getSelection();
+  if (!sel.rangeCount) { el.focus(); return; }
+  const range = sel.getRangeAt(0);
+
+  // Find and remove the preceding "@"
+  const textNode = range.startContainer;
+  if (textNode.nodeType === Node.TEXT_NODE) {
+    const t = textNode.textContent;
+    const offset = range.startOffset;
+    const atIdx = t.lastIndexOf("@", offset - 1);
+    if (atIdx >= 0 && atIdx >= offset - 1) {
+      textNode.textContent = t.slice(0, atIdx) + t.slice(offset);
+      range.setStart(textNode, atIdx);
+      range.collapse(true);
+    }
+  }
+
+  const typeLabel = text;
+  const mType = text.replace(/\d+$/, "").toLowerCase();
+  const idx = parseInt(text.replace(/\D/g, ""));
+  let count = 0;
+  const item = mediaItems.find(m => m.type === mType && ++count === idx);
+
+  const span = buildMentionSpan(text, mType, item?.thumbUrl);
+  range.insertNode(span);
+
+  // Add a space after and move cursor there
+  const space = document.createTextNode("\u00A0");
+  span.after(space);
+  range.setStartAfter(space);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  closeAllPopups();
+  el.focus();
+  savePromptToStorage();
+}
+
+// ── Mention thumb preview ──
+const _preview = document.createElement("div");
+_preview.className = "mention-preview";
+_preview.innerHTML = '<img>';
+document.body.appendChild(_preview);
+
+document.getElementById("i-prompt").addEventListener("mouseover", (e) => {
+  const mention = e.target.closest(".mention");
+  if (!mention) return;
+  const thumb = mention.querySelector(".mention-inline-thumb");
+  if (!thumb) return;
+  const rect = mention.getBoundingClientRect();
+  const pImg = _preview.querySelector("img");
+  pImg.onload = () => {
+    _preview.style.left = (rect.left + rect.width / 2 - pImg.offsetWidth / 2) + "px";
+    _preview.style.top = (rect.top - pImg.offsetHeight - 8) + "px";
+    _preview.classList.add("visible");
+  };
+  pImg.src = thumb.src;
+  if (pImg.complete) pImg.onload();
+});
+document.getElementById("i-prompt").addEventListener("mouseout", (e) => {
+  const mention = e.target.closest(".mention");
+  if (mention || e.target.classList?.contains("mention")) {
+    _preview.classList.remove("visible");
+  }
+});
 
 // ── Prompt helpers (global) ──
 let mentionIdx = 0;
 
-function autoResize() {
-  const ta = document.getElementById("i-prompt");
-  ta.style.height = "auto";
-  ta.style.height = ta.scrollHeight + "px";
-}
+function autoResize() { /* contenteditable grows naturally */ }
 
-function updateHighlight() {
-  const ta = document.getElementById("i-prompt");
-  const hl = document.getElementById("prompt-highlight");
-  const val = ta.value;
-  if (!val) { hl.innerHTML = ""; return; }
-  // Match @图片1, @视频2, @音频1 etc - color by type
-  hl.innerHTML = esc(val).replace(/@(图片|视频|音频)(\d+)/g, (match, type) => {
-    const c = type === "图片" ? "#3d9be9" : type === "视频" ? "#e67e22" : "#27ae60";
-    return `<span class="mention" style="color:${c}">${match}</span>`;
-  }) + '\n';
-}
+function updateHighlight() { /* no longer needed - contenteditable handles display */ }
 
 let isComposing = false;
 document.getElementById("i-prompt").addEventListener("compositionstart", () => { isComposing = true; });
 document.getElementById("i-prompt").addEventListener("compositionend", () => { isComposing = false; onPromptInput(); });
 
+function savePromptToStorage() {
+  localStorage.setItem("prompt", getPromptText());
+}
+
 function onPromptInput() {
-  autoResize();
-  updateHighlight();
-  if (isComposing) return; // Skip during IME composition
-  const ta = document.getElementById("i-prompt");
-  const pos = ta.selectionStart;
-  if (pos > 0 && ta.value[pos - 1] === "@") {
-    if (mediaItems.length > 0) {
-      mentionIdx = 0;
-      showMentionAtCursor();
+  savePromptToStorage();
+  if (isComposing) return;
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const t = node.textContent;
+    const pos = range.startOffset;
+    if (pos > 0 && t[pos - 1] === "@") {
+      if (mediaItems.length > 0) {
+        mentionIdx = 0;
+        showMentionAtCursor();
+      }
+    } else if (openPopup === document.getElementById("mention-popup")) {
+      closeAllPopups();
     }
   } else if (openPopup === document.getElementById("mention-popup")) {
     closeAllPopups();
@@ -1001,7 +1119,7 @@ function apiHeaders() {
 
 function buildRequest() {
   const content = [];
-  const prompt = document.getElementById("i-prompt").value.trim();
+  const prompt = getPromptText().trim();
   if (prompt) content.push({ type: "text", text: prompt });
 
   const refMode = document.getElementById("i-ref").value;
@@ -1068,7 +1186,7 @@ async function generate() {
       alert("Please add a prompt or media before generating."); return;
     }
     const inputSnapshot = {
-      prompt: document.getElementById("i-prompt").value.trim(),
+      prompt: getPromptText().trim(),
       model: document.getElementById("i-model").value,
       ratio: document.getElementById("i-ratio").value,
       duration: parseInt(document.getElementById("i-dur").value, 10),
@@ -1257,9 +1375,7 @@ function restoreInput(taskId) {
   const inp = task.input;
 
   // Prompt
-  document.getElementById("i-prompt").value = inp.prompt || "";
-  autoResize();
-  updateHighlight();
+  setPromptText(inp.prompt || "");
 
   // Model
   document.getElementById("i-model").value = inp.model || "seedance";
@@ -1338,7 +1454,7 @@ function renderTasks() {
     const isLive = t.status === "submitting" || t.status === "whitelisting";
     const liveIcon = isLive ? `<span style="display:inline-block;width:9px;height:9px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:3px"></span>` : "";
     const key = t.id || ("_" + t.created);
-    let h = `<div class="task"><div class="th"><span class="tid">${t.id||""}</span><span><span class="st ${t.status}">${liveIcon}${SL[t.status]||t.status}</span>${t.progress?`<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>`:""}<span data-elapsed="${key}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span></span></div>`;
+    let h = `<div class="task" id="task-${key}"><div class="th"><span class="tid">${t.id||""}</span><span><span class="st ${t.status}">${liveIcon}${SL[t.status]||t.status}</span>${t.progress?`<span style="font-size:11px;color:#0969da;margin-left:6px">${t.progress}</span>`:""}<span data-elapsed="${key}" style="font-size:11px;color:#aaa;margin-left:6px">${elapsed(t)}</span><span class="x" onclick="removeTask('${escJs(key)}')" title="Remove" style="margin-left:6px">×</span></span></div>`;
     h += renderTaskInput(t);
     if (t.error) {
       h += `<div style="margin-top:6px;padding:7px 10px;background:#fff0f0;border:1px solid #ffc8c8;border-radius:8px;font-size:12px;color:#cf222e">${esc(t.error)}</div>`;
@@ -1352,6 +1468,13 @@ function renderTasks() {
   }).join("");
 }
 
+function removeTask(key) {
+  const idx = tasks.findIndex(t => (t.id || ("_" + t.created)) === key);
+  if (idx < 0) return;
+  tasks.splice(idx, 1);
+  saveTasks();
+  renderTasks();
+}
 function clearTasks(){if(!confirm("Clear all task history?"))return;tasks.length=0;saveTasks();renderTasks()}
 function friendlyError(msg) {
   if (!msg) return "生成失败，请重试";
