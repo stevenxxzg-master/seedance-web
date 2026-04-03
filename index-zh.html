@@ -356,9 +356,6 @@ a.s:hover{border-color:#999}
 </div>
 
 <script>
-// ── API origin (detect proxy context) ──
-const API_ORIGIN = window.location.pathname.includes("iframe-proxy") ? "http://49.51.207.121:10100" : "";
-
 // ── State ──
 const MAX_TASKS = 50;
 const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
@@ -1105,14 +1102,14 @@ async function handleFileForItem(id, file) {
     if (item.type === "video") {
       const form = new FormData();
       form.append("file", file);
-      const resp = await fetch(API_ORIGIN + "/api/upload/video", { method: "POST", body: form, headers: { "X-Storage": "tos" } });
+      const resp = await fetch("/api/upload/video", { method: "POST", body: form, headers: { "X-Storage": "tos" } });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.error || `Upload failed: ${resp.status}`);
       }
       ({ fileUrl } = await resp.json());
     } else {
-      const presignResp = await fetch(API_ORIGIN + "/api/cos/presign", {
+      const presignResp = await fetch("/api/cos/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Storage": "tos" },
         body: JSON.stringify({ filename: file.name, contentType: file.type }),
@@ -1188,7 +1185,7 @@ async function uploadKfFile(which, file) {
   const obj = which === "first" ? kfFirst : kfLast;
   if (!obj) return;
   try {
-    const presignResp = await fetch(API_ORIGIN + "/api/tos/presign", {
+    const presignResp = await fetch("/api/tos/presign", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: file.name, contentType: file.type }),
     });
@@ -1317,7 +1314,7 @@ async function runSubmit(task, body) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       console.log(`[Generate] Attempt ${attempt}/3...`);
-      const resp = await fetch(API_ORIGIN + "/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(currentBody) });
+      const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(currentBody) });
       const data = await resp.json();
       const errMsg = data.error?.message || data.message || "";
       if (!resp.ok || (data.code && data.code !== "success")) {
@@ -1392,7 +1389,7 @@ async function pollAll() {
   let changed = false;
   for (const task of running) {
     try {
-      const resp = await fetch(`${API_ORIGIN}/api/status/${task.id}`, { headers: apiHeaders() });
+      const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
       const data = await resp.json();
       task.response = data;
       if (resp.ok && data.code !== "fail_to_fetch_task") {
