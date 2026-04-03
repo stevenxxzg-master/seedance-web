@@ -343,10 +343,10 @@ a.s:hover{border-color:#999}
     </div>
     <div class="about-section-title">定价</div>
     <div class="about-prices">
-      <div class="about-price"><div class="about-price-tier">480p T2V</div><div class="about-price-val">$0.12<span>/s</span></div></div>
-      <div class="about-price"><div class="about-price-tier">720p T2V</div><div class="about-price-val">$0.28<span>/s</span></div></div>
-      <div class="about-price"><div class="about-price-tier">480p V2V</div><div class="about-price-val">$0.15<span>/s</span></div></div>
-      <div class="about-price"><div class="about-price-tier">720p V2V</div><div class="about-price-val">$0.33<span>/s</span></div></div>
+      <div class="about-price"><div class="about-price-tier">480p T2V</div><div class="about-price-val">¥0.56<span>/s</span></div></div>
+      <div class="about-price"><div class="about-price-tier">720p T2V</div><div class="about-price-val">¥1.31<span>/s</span></div></div>
+      <div class="about-price"><div class="about-price-tier">480p V2V</div><div class="about-price-val">¥0.70<span>/s</span></div></div>
+      <div class="about-price"><div class="about-price-tier">720p V2V</div><div class="about-price-val">¥1.55<span>/s</span></div></div>
     </div>
     <div class="about-section-title">提示词示例</div>
     <div class="about-example">
@@ -377,8 +377,9 @@ const DURATIONS = [5,6,7,8,9,10,11,12,13,14,15];
 // Pricing per second in USD (2x Volcengine list price, CNY÷7.2)
 // T2V/I2V: output tokens × (46×2) CNY/M
 // V2V: (input+output tokens) × (28×2) CNY/M → effective 112 CNY/M per output-second
-const COST_PER_SEC     = { "480p": 0.12, "720p": 0.28 }; // T2V / I2V
-const COST_PER_SEC_VID = { "480p": 0.15, "720p": 0.33 }; // V2V (input+output billed together)
+// CNY per second (USD × 7.2)
+const COST_PER_SEC     = { "480p": 0.56, "720p": 1.31 }; // T2V / I2V
+const COST_PER_SEC_VID = { "480p": 0.70, "720p": 1.55 }; // V2V (input+output billed together)
 
 function updateCostLabel() {
   const res = document.getElementById("i-res")?.value || "720p";
@@ -386,11 +387,11 @@ function updateCostLabel() {
   const model = document.getElementById("i-model").value;
   const hasVideo = mediaItems.some(m => m.type === "video" && m.url);
   const rates = hasVideo ? COST_PER_SEC_VID : COST_PER_SEC;
-  const rate = rates[res] ?? 0.28;
+  const rate = rates[res] ?? 1.31;
   const mult = model === "seedance-fast" ? 0.5 : 1;
-  const cost = (rate * dur * mult).toFixed(2);
+  const cost = (rate * dur * mult).toFixed(1);
   const el = document.getElementById("cost-label");
-  if (el) el.textContent = `↑ $${cost}`;
+  if (el) el.textContent = `↑ ¥${cost}`;
 }
 const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],"3:4":[18,24],"9:16":[16,28]};
 
