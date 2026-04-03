@@ -6,7 +6,7 @@ import COS from "cos-nodejs-sdk-v5";
 import crypto from "crypto";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { createReadStream, unlinkSync, mkdirSync } from "fs";
+import { createReadStream, readFileSync, unlinkSync, mkdirSync } from "fs";
 import { createRequire } from "module";
 import multer from "multer";
 import os from "os";
@@ -155,6 +155,38 @@ app.post("/api/cos/presign", (req, res) => {
   );
 });
 
+// Generic file upload — supports COS (default) and TOS (X-Storage: tos)
+app.post("/api/upload/file", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file provided" });
+  const useTos = req.headers["x-storage"] === "tos";
+  try {
+    let fileUrl;
+    if (useTos) {
+      if (!TOS_AK || !TOS_SK) throw new Error("TOS not configured");
+      const ext = (req.file.originalname || "bin").split(".").pop() || "bin";
+      const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const presign = tosPresignPut(key, req.file.mimetype);
+      const body = readFileSync(req.file.path);
+      const upResp = await fetch(presign.uploadUrl, { method: "PUT", headers: { "Content-Type": req.file.mimetype }, body });
+      if (!upResp.ok) throw new Error(`TOS upload failed: ${upResp.status}`);
+      fileUrl = presign.fileUrl;
+    } else {
+      const ext = (req.file.originalname || "bin").split(".").pop() || "bin";
+      const cosKey = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      await new Promise((resolve, reject) => {
+        cos.putObject({ Bucket: COS_BUCKET, Region: COS_REGION, Key: cosKey, Body: createReadStream(req.file.path), ContentType: req.file.mimetype }, (err) => err ? reject(err) : resolve());
+      });
+      fileUrl = `${COS_BASE_URL}/${cosKey}`;
+    }
+    res.json({ fileUrl });
+  } catch (err) {
+    console.error("File upload error:", err);
+    res.status(500).json({ error: "Upload failed: " + err.message });
+  } finally {
+    try { unlinkSync(req.file.path); } catch {}
+  }
+});
+
 // ── Video upload with compression ──
 const MAX_PIXELS = 927408;
 const MAX_DURATION = 15;
@@ -212,22 +244,23 @@ app.post("/api/upload/video", upload.single("file"), async (req, res) => {
 
     await execFileAsync("ffmpeg", ffArgs, { timeout: 120000 });
 
-    // Upload to COS
-    const cosKey = `uploads/${Date.now()}_${outName}`;
-    await new Promise((resolve, reject) => {
-      cos.putObject(
-        {
-          Bucket: COS_BUCKET,
-          Region: COS_REGION,
-          Key: cosKey,
-          Body: createReadStream(outputPath),
-          ContentType: "video/mp4",
-        },
-        (err) => (err ? reject(err) : resolve())
-      );
-    });
-
-    res.json({ fileUrl: `${COS_BASE_URL}/${cosKey}` });
+    // Upload to COS or TOS
+    const useTos = req.headers["x-storage"] === "tos";
+    const storageKey = `uploads/${Date.now()}_${outName}`;
+    let fileUrl;
+    if (useTos && TOS_AK && TOS_SK) {
+      const presign = tosPresignPut(storageKey, "video/mp4");
+      const body = readFileSync(outputPath);
+      const upResp = await fetch(presign.uploadUrl, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body });
+      if (!upResp.ok) throw new Error(`TOS upload failed: ${upResp.status}`);
+      fileUrl = presign.fileUrl;
+    } else {
+      await new Promise((resolve, reject) => {
+        cos.putObject({ Bucket: COS_BUCKET, Region: COS_REGION, Key: storageKey, Body: createReadStream(outputPath), ContentType: "video/mp4" }, (err) => err ? reject(err) : resolve());
+      });
+      fileUrl = `${COS_BASE_URL}/${storageKey}`;
+    }
+    res.json({ fileUrl });
   } catch (err) {
     console.error("Video processing error:", err);
     res.status(500).json({ error: "Video processing failed: " + err.message });
@@ -277,71 +310,6 @@ function tosPresignPut(key, contentType, expires = 600) {
   };
 }
 
-// TOS file upload (server-side relay — avoids CORS issues)
-app.post("/api/tos/upload", upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file provided" });
-  if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
-  const ext = (req.file.originalname || "bin").split(".").pop() || "bin";
-  const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
-  try {
-    const { uploadUrl, fileUrl } = tosPresignPut(key, req.file.mimetype);
-    const { readFileSync } = await import("fs");
-    const body = readFileSync(req.file.path);
-    const upResp = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": req.file.mimetype }, body });
-    if (!upResp.ok) throw new Error(`TOS upload failed: ${upResp.status}`);
-    res.json({ fileUrl });
-  } catch (err) {
-    console.error("TOS upload error:", err);
-    res.status(500).json({ error: "Upload failed: " + err.message });
-  } finally {
-    try { unlinkSync(req.file.path); } catch {}
-  }
-});
-
-app.post("/api/upload-tos/video", upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file provided" });
-  if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
-
-  const inputPath = req.file.path;
-  const outName = `${crypto.randomUUID().slice(0, 8)}.mp4`;
-  const outputPath = join(tmpDir, outName);
-
-  try {
-    const { width, height, duration } = await probeVideo(inputPath);
-    const pixels = width * height;
-    const ffArgs = ["-i", inputPath, "-y"];
-    if (duration > MAX_DURATION) {
-      const startTime = duration - MAX_DURATION;
-      ffArgs.push("-ss", String(startTime), "-t", String(MAX_DURATION));
-    }
-    if (pixels > MAX_PIXELS) {
-      const scale = Math.sqrt(MAX_PIXELS / pixels);
-      const newW = Math.floor((width * scale) / 2) * 2;
-      const newH = Math.floor((height * scale) / 2) * 2;
-      ffArgs.push("-vf", `scale=${newW}:${newH}`);
-    }
-    ffArgs.push("-c:v", "libx264", "-preset", "fast", "-crf", "23");
-    ffArgs.push("-c:a", "aac", "-b:a", "128k");
-    ffArgs.push(outputPath);
-    await execFileAsync("ffmpeg", ffArgs, { timeout: 120000 });
-
-    // Upload to TOS via presigned PUT
-    const tosKey = `uploads/${Date.now()}_${outName}`;
-    const { uploadUrl, fileUrl } = tosPresignPut(tosKey, "video/mp4", 600);
-    const { readFileSync } = await import("fs");
-    const body = readFileSync(outputPath);
-    const upResp = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body });
-    if (!upResp.ok) throw new Error(`TOS upload failed: ${upResp.status}`);
-
-    res.json({ fileUrl });
-  } catch (err) {
-    console.error("Video processing error (TOS):", err);
-    res.status(500).json({ error: "Video processing failed: " + err.message });
-  } finally {
-    try { unlinkSync(inputPath); } catch {}
-    try { unlinkSync(outputPath); } catch {}
-  }
-});
 
 // ── Volcengine Asset API (server-side AK/SK from env) ──
 const VOLC_VERSION = "2024-01-01";

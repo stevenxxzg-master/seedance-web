@@ -1101,8 +1101,8 @@ async function handleFileForItem(id, file) {
     let fileUrl;
     const form = new FormData();
     form.append("file", file);
-    const endpoint = item.type === "video" ? "/api/upload-tos/video" : "/api/tos/upload";
-    const resp = await fetch(endpoint, { method: "POST", body: form });
+    const endpoint = item.type === "video" ? "/api/upload/video" : "/api/upload/file";
+    const resp = await fetch(endpoint, { method: "POST", body: form, headers: { "X-Storage": "tos" } });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `Upload failed: ${resp.status}`);
@@ -1171,7 +1171,7 @@ async function uploadKfFile(which, file) {
   try {
     const form = new FormData();
     form.append("file", file);
-    const resp = await fetch("/api/tos/upload", { method: "POST", body: form });
+    const resp = await fetch("/api/upload/file", { method: "POST", body: form, headers: { "X-Storage": "tos" } });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `Upload failed: ${resp.status}`);
