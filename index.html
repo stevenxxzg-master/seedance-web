@@ -362,21 +362,20 @@ const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
 // Purge legacy demo tasks from localStorage
 for (let i = tasks.length - 1; i >= 0; i--) { if (tasks[i].demo) tasks.splice(i, 1); }
 
-// Demo tasks (rendered dynamically, not stored in localStorage)
-const _TB = "/tutorial";
+// Demo tasks (assets hosted on COS)
 const DEMO_TASKS = {
   all: {
     id: "demo-reference", demo: true, status: "completed",
     created: 0, endTime: 0,
-    videoUrl: `${_TB}/全能参考 All-modal Reference/Output.mp4`,
+    videoUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198442920_994e6a3a.mp4",
     input: {
       prompt: "@Image1 @Image2 copy movements and footworks in @Video1. Music reference: @Audio1.",
       model: "seedance", refMode: "all", ratio: "16:9", duration: 10,
       mediaItems: [
-        { type: "image", name: "@Image1.png", url: `${_TB}/全能参考 All-modal Reference/@图片1.png`, cosUrl: `${_TB}/全能参考 All-modal Reference/@图片1.png` },
-        { type: "image", name: "@Image2.png", url: `${_TB}/全能参考 All-modal Reference/@图片2.png`, cosUrl: `${_TB}/全能参考 All-modal Reference/@图片2.png` },
-        { type: "video", name: "@Video1.mp4", url: `${_TB}/全能参考 All-modal Reference/@视频1.mp4`, cosUrl: `${_TB}/全能参考 All-modal Reference/@视频1.mp4` },
-        { type: "audio", name: "@Audio1.wav", url: `${_TB}/全能参考 All-modal Reference/@Audio1.WAV`, cosUrl: `${_TB}/全能参考 All-modal Reference/@Audio1.WAV` },
+        { type: "image", name: "@Image1.png", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198424419_ee362850.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198424419_ee362850.png" },
+        { type: "image", name: "@Image2.png", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198429287_84ec49b6.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198429287_84ec49b6.png" },
+        { type: "video", name: "@Video1.mp4", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198434181_cf552f9d.mp4", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198434181_cf552f9d.mp4" },
+        { type: "audio", name: "@Audio1.wav", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198438507_4514d989.wav", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198438507_4514d989.wav" },
       ]
     },
     response: {}
@@ -384,12 +383,12 @@ const DEMO_TASKS = {
   keyframes: {
     id: "demo-keyframes", demo: true, status: "completed",
     created: 0, endTime: 0,
-    videoUrl: `${_TB}/首尾帧 Start-End Frame/Output.mp4`,
+    videoUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198471834_d5f87a1e.mp4",
     input: {
       prompt: "Silver magic erupts, armor snaps onto her body in rapid flashes. Camera pushes in then pulls back wide. Hair billows, shockwave ripples the ocean. Moonlit beach, flat vector style.",
       model: "seedance", refMode: "keyframes", ratio: "16:9", duration: 5,
-      kfFirst: { url: `${_TB}/首尾帧 Start-End Frame/frame_start.png`, cosUrl: `${_TB}/首尾帧 Start-End Frame/frame_start.png`, name: "frame_start.png" },
-      kfLast: { url: `${_TB}/首尾帧 Start-End Frame/frame_end.png`, cosUrl: `${_TB}/首尾帧 Start-End Frame/frame_end.png`, name: "frame_end.png" },
+      kfFirst: { url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198449947_71598228.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198449947_71598228.png", name: "frame_start.png" },
+      kfLast: { url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198458190_87e8afc6.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198458190_87e8afc6.png", name: "frame_end.png" },
     },
     response: {}
   }
