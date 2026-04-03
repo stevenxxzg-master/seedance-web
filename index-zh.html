@@ -197,7 +197,7 @@ a.s:hover{border-color:#999}
   <summary style="font-size:12px;color:#ccc;cursor:pointer;margin-bottom:8px">API 设置</summary>
   <div class="settings">
     <div class="f" style="flex:2"><label>API Key</label><input type="password" id="i-key" placeholder="sk-..."></div>
-    <div class="f" style="flex:2"><label>Base URL</label><input type="text" id="i-base" placeholder="https://www.anyfast.ai"></div>
+    <div class="f" style="flex:2"><label>Base URL</label><input type="text" id="i-base" placeholder="https://www.anyfast.com.cn"></div>
   </div>
   <div class="settings">
     <label style="margin:0"><input type="checkbox" id="i-search"> 联网搜索</label>
@@ -467,7 +467,7 @@ const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],
 
   // Pre-fill Base URL default
   if (!document.getElementById("i-base").value) {
-    document.getElementById("i-base").value = "https://www.anyfast.ai";
+    document.getElementById("i-base").value = "https://www.anyfast.com.cn";
   }
 
   renderTasks();
@@ -1064,14 +1064,14 @@ async function handleFileForItem(id, file) {
     if (item.type === "video") {
       const form = new FormData();
       form.append("file", file);
-      const resp = await fetch("/api/upload/video", { method: "POST", body: form });
+      const resp = await fetch("/api/upload-tos/video", { method: "POST", body: form });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.error || `Upload failed: ${resp.status}`);
       }
       ({ fileUrl } = await resp.json());
     } else {
-      const presignResp = await fetch("/api/cos/presign", {
+      const presignResp = await fetch("/api/tos/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename: file.name, contentType: file.type }),
@@ -1147,7 +1147,7 @@ async function uploadKfFile(which, file) {
   const obj = which === "first" ? kfFirst : kfLast;
   if (!obj) return;
   try {
-    const presignResp = await fetch("/api/cos/presign", {
+    const presignResp = await fetch("/api/tos/presign", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: file.name, contentType: file.type }),
     });
@@ -1563,7 +1563,7 @@ let cachedGroupId = null;
 let cachedGroupCount = 0;
 let groupLockPromise = null; // Prevent concurrent group lookups
 
-const ASSET_BASE = "https://www.anyfast.ai";
+const ASSET_BASE = "https://www.anyfast.com.cn";
 
 async function assetCall(action, body) {
   const key = document.getElementById("i-key").value.trim();
@@ -1682,7 +1682,7 @@ document.addEventListener("keydown", e => {
 <div id="key-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeKeyModal()">
   <div style="background:#fff;border-radius:16px;padding:28px 24px;width:360px;max-width:90vw;box-shadow:0 12px 40px rgba(0,0,0,.18)">
     <div style="font-size:16px;font-weight:600;margin-bottom:6px">请输入 API Key</div>
-    <div style="font-size:13px;color:#666;margin-bottom:16px">还没有？<a href="https://www.anyfast.ai/register" target="_blank" style="color:#1a1a1a;font-weight:500;text-decoration:underline">免费获取 API Key →</a></div>
+    <div style="font-size:13px;color:#666;margin-bottom:16px">还没有？<a href="https://www.anyfast.com.cn/register" target="_blank" style="color:#1a1a1a;font-weight:500;text-decoration:underline">免费获取 API Key →</a></div>
     <input type="password" id="modal-key-input" placeholder="sk-..." style="width:100%;padding:8px 12px;border:1px solid #e0e0e0;border-radius:8px;font:inherit;font-size:13px;margin-bottom:14px;box-sizing:border-box" onkeydown="if(event.key==='Enter')saveKeyAndGenerate()">
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="s" onclick="closeKeyModal()">取消</button>

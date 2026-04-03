@@ -237,6 +237,106 @@ app.post("/api/upload/video", upload.single("file"), async (req, res) => {
   }
 });
 
+// ── TOS (Volcengine) Configuration ──
+const TOS_AK = process.env.TOS_AK;
+const TOS_SK = process.env.TOS_SK;
+const TOS_BUCKET = process.env.TOS_BUCKET || "anyfast-seedance-web";
+const TOS_REGION = process.env.TOS_REGION || "cn-beijing";
+const TOS_S3_HOST = `${TOS_BUCKET}.tos-s3-${TOS_REGION}.volces.com`;
+const TOS_PUBLIC_HOST = `${TOS_BUCKET}.tos-${TOS_REGION}.volces.com`;
+
+function tosSignKey(dateShort) {
+  let k = crypto.createHmac("sha256", "AWS4" + TOS_SK).update(dateShort).digest();
+  k = crypto.createHmac("sha256", k).update(TOS_REGION).digest();
+  k = crypto.createHmac("sha256", k).update("s3").digest();
+  return crypto.createHmac("sha256", k).update("aws4_request").digest();
+}
+
+function tosPresignPut(key, contentType, expires = 600) {
+  const now = new Date();
+  const iso = now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  const dateShort = iso.slice(0, 8);
+  const scope = `${dateShort}/${TOS_REGION}/s3/aws4_request`;
+
+  const params = new URLSearchParams();
+  params.set("X-Amz-Algorithm", "AWS4-HMAC-SHA256");
+  params.set("X-Amz-Credential", `${TOS_AK}/${scope}`);
+  params.set("X-Amz-Date", iso);
+  params.set("X-Amz-Expires", String(expires));
+  params.set("X-Amz-SignedHeaders", "host");
+  params.sort();
+
+  const canon = ["PUT", `/${key}`, params.toString(), `host:${TOS_S3_HOST}\n`, "host", "UNSIGNED-PAYLOAD"].join("\n");
+  const sts = ["AWS4-HMAC-SHA256", iso, scope, crypto.createHash("sha256").update(canon).digest("hex")].join("\n");
+  const sig = crypto.createHmac("sha256", tosSignKey(dateShort)).update(sts).digest("hex");
+  params.set("X-Amz-Signature", sig);
+
+  return {
+    uploadUrl: `https://${TOS_S3_HOST}/${key}?${params.toString()}`,
+    fileUrl: `https://${TOS_PUBLIC_HOST}/${key}`,
+  };
+}
+
+app.post("/api/tos/presign", (req, res) => {
+  const { filename, contentType } = req.body;
+  if (!filename || !contentType) return res.status(400).json({ error: "filename and contentType required" });
+  if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
+  const ext = filename.split(".").pop() || "bin";
+  const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  try {
+    const result = tosPresignPut(key, contentType);
+    res.json({ ...result, key });
+  } catch (err) {
+    console.error("TOS presign error:", err);
+    res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
+app.post("/api/upload-tos/video", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file provided" });
+  if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
+
+  const inputPath = req.file.path;
+  const outName = `${crypto.randomUUID().slice(0, 8)}.mp4`;
+  const outputPath = join(tmpDir, outName);
+
+  try {
+    const { width, height, duration } = await probeVideo(inputPath);
+    const pixels = width * height;
+    const ffArgs = ["-i", inputPath, "-y"];
+    if (duration > MAX_DURATION) {
+      const startTime = duration - MAX_DURATION;
+      ffArgs.push("-ss", String(startTime), "-t", String(MAX_DURATION));
+    }
+    if (pixels > MAX_PIXELS) {
+      const scale = Math.sqrt(MAX_PIXELS / pixels);
+      const newW = Math.floor((width * scale) / 2) * 2;
+      const newH = Math.floor((height * scale) / 2) * 2;
+      ffArgs.push("-vf", `scale=${newW}:${newH}`);
+    }
+    ffArgs.push("-c:v", "libx264", "-preset", "fast", "-crf", "23");
+    ffArgs.push("-c:a", "aac", "-b:a", "128k");
+    ffArgs.push(outputPath);
+    await execFileAsync("ffmpeg", ffArgs, { timeout: 120000 });
+
+    // Upload to TOS via presigned PUT
+    const tosKey = `uploads/${Date.now()}_${outName}`;
+    const { uploadUrl, fileUrl } = tosPresignPut(tosKey, "video/mp4", 600);
+    const { readFileSync } = await import("fs");
+    const body = readFileSync(outputPath);
+    const upResp = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body });
+    if (!upResp.ok) throw new Error(`TOS upload failed: ${upResp.status}`);
+
+    res.json({ fileUrl });
+  } catch (err) {
+    console.error("Video processing error (TOS):", err);
+    res.status(500).json({ error: "Video processing failed: " + err.message });
+  } finally {
+    try { unlinkSync(inputPath); } catch {}
+    try { unlinkSync(outputPath); } catch {}
+  }
+});
+
 // ── Volcengine Asset API (server-side AK/SK from env) ──
 const VOLC_VERSION = "2024-01-01";
 const VOLC_AK = process.env.VOLC_AK;
