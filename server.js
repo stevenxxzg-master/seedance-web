@@ -311,6 +311,22 @@ app.post("/api/upload/file", upload.single("file"), async (req, res) => {
   }
 });
 
+// TOS presign — browser uploads directly to TOS
+app.post("/api/tos/presign", (req, res) => {
+  const { filename, contentType } = req.body;
+  if (!filename || !contentType) return res.status(400).json({ error: "filename and contentType required" });
+  if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
+  const ext = filename.split(".").pop() || "bin";
+  const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  try {
+    const result = tosPresignPut(key, contentType);
+    res.json({ ...result, key });
+  } catch (err) {
+    console.error("TOS presign error:", err);
+    res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
 // ── Volcengine Asset API (server-side AK/SK from env) ──
 const VOLC_VERSION = "2024-01-01";
 const VOLC_AK = process.env.VOLC_AK;
