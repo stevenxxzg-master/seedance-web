@@ -1109,9 +1109,9 @@ async function handleFileForItem(id, file) {
       }
       ({ fileUrl } = await resp.json());
     } else {
-      const presignResp = await fetch("/api/tos/presign", {
+      const presignResp = await fetch("/api/cos/presign", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Storage": "tos" },
         body: JSON.stringify({ filename: file.name, contentType: file.type }),
       });
       if (!presignResp.ok) throw new Error("Failed to get upload URL");

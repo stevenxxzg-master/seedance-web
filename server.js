@@ -131,6 +131,17 @@ app.post("/api/cos/presign", (req, res) => {
   const ext = filename.split(".").pop() || "bin";
   const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
 
+  // TOS mode via X-Storage header
+  if (req.headers["x-storage"] === "tos" && TOS_AK && TOS_SK) {
+    try {
+      const result = tosPresignPut(key, contentType);
+      return res.json({ ...result, key });
+    } catch (err) {
+      console.error("TOS presign error:", err);
+      return res.status(500).json({ error: "Failed to generate upload URL" });
+    }
+  }
+
   cos.getObjectUrl(
     {
       Bucket: COS_BUCKET,
