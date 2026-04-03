@@ -277,18 +277,24 @@ function tosPresignPut(key, contentType, expires = 600) {
   };
 }
 
-app.post("/api/tos/presign", (req, res) => {
-  const { filename, contentType } = req.body;
-  if (!filename || !contentType) return res.status(400).json({ error: "filename and contentType required" });
+// TOS file upload (server-side relay — avoids CORS issues)
+app.post("/api/tos/upload", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file provided" });
   if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
-  const ext = filename.split(".").pop() || "bin";
+  const ext = (req.file.originalname || "bin").split(".").pop() || "bin";
   const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
   try {
-    const result = tosPresignPut(key, contentType);
-    res.json({ ...result, key });
+    const { uploadUrl, fileUrl } = tosPresignPut(key, req.file.mimetype);
+    const { readFileSync } = await import("fs");
+    const body = readFileSync(req.file.path);
+    const upResp = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": req.file.mimetype }, body });
+    if (!upResp.ok) throw new Error(`TOS upload failed: ${upResp.status}`);
+    res.json({ fileUrl });
   } catch (err) {
-    console.error("TOS presign error:", err);
-    res.status(500).json({ error: "Failed to generate upload URL" });
+    console.error("TOS upload error:", err);
+    res.status(500).json({ error: "Upload failed: " + err.message });
+  } finally {
+    try { unlinkSync(req.file.path); } catch {}
   }
 });
 

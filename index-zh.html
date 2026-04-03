@@ -1099,31 +1099,15 @@ async function handleFileForItem(id, file) {
 
   try {
     let fileUrl;
-    if (item.type === "video") {
-      const form = new FormData();
-      form.append("file", file);
-      const resp = await fetch("/api/upload-tos/video", { method: "POST", body: form });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Upload failed: ${resp.status}`);
-      }
-      ({ fileUrl } = await resp.json());
-    } else {
-      const presignResp = await fetch("/api/tos/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, contentType: file.type }),
-      });
-      if (!presignResp.ok) throw new Error("Failed to get upload URL");
-      const presign = await presignResp.json();
-      fileUrl = presign.fileUrl;
-      const uploadResp = await fetch(presign.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+    const form = new FormData();
+    form.append("file", file);
+    const endpoint = item.type === "video" ? "/api/upload-tos/video" : "/api/tos/upload";
+    const resp = await fetch(endpoint, { method: "POST", body: form });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `Upload failed: ${resp.status}`);
     }
+    ({ fileUrl } = await resp.json());
     item.url = fileUrl;
     item.cosUrl = fileUrl; // Persist COS URL for display (blob URLs expire)
     console.log(`[Upload] ${item.type} uploaded to COS:`, fileUrl);
@@ -1185,18 +1169,16 @@ async function uploadKfFile(which, file) {
   const obj = which === "first" ? kfFirst : kfLast;
   if (!obj) return;
   try {
-    const presignResp = await fetch("/api/tos/presign", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename: file.name, contentType: file.type }),
-    });
-    if (!presignResp.ok) throw new Error("Failed to get upload URL");
-    const presign = await presignResp.json();
-    const uploadResp = await fetch(presign.uploadUrl, {
-      method: "PUT", headers: { "Content-Type": file.type }, body: file,
-    });
-    if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
-    obj.url = presign.fileUrl;
-    obj.cosUrl = presign.fileUrl;
+    const form = new FormData();
+    form.append("file", file);
+    const resp = await fetch("/api/tos/upload", { method: "POST", body: form });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `Upload failed: ${resp.status}`);
+    }
+    const { fileUrl } = await resp.json();
+    obj.url = fileUrl;
+    obj.cosUrl = fileUrl;
   } catch (err) {
     alert("上传失败，请重试");
     if (which === "first") kfFirst = null; else kfLast = null;
