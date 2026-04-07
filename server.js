@@ -135,13 +135,14 @@ const cos = new COS({
 // /api/presign — alias that also supports X-Storage: tos
 app.post("/api/presign", (req, res, next) => { req.url = "/api/cos/presign"; next(); });
 app.post("/api/cos/presign", (req, res) => {
-  const { filename, contentType } = req.body;
+  const { filename, contentType, prefix } = req.body;
   if (!filename || !contentType) {
     return res.status(400).json({ error: "filename and contentType required" });
   }
 
+  const pfx = prefix || "uploads";
   const ext = filename.split(".").pop() || "bin";
-  const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const key = `${pfx}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
 
   // TOS mode via X-Storage header
   if (req.headers["x-storage"] === "tos" && TOS_AK && TOS_SK) {

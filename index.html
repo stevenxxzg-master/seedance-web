@@ -362,20 +362,20 @@ const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
 // Purge legacy demo tasks from localStorage
 for (let i = tasks.length - 1; i >= 0; i--) { if (tasks[i].demo) tasks.splice(i, 1); }
 
-// Demo tasks (assets hosted on COS)
+// Demo tasks (assets hosted on COS — tutorial/ prefix, excluded from daily cleanup)
 const DEMO_TASKS = {
   all: {
     id: "demo-reference", demo: true, status: "completed",
     created: 0, endTime: 0,
-    videoUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198442920_994e6a3a.mp4",
+    videoUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538468251_aa98138a.mp4",
     input: {
       prompt: "@Image1 @Image2 copy movements and footworks in @Video1. Music reference: @Audio1.",
       model: "seedance", refMode: "all", ratio: "16:9", duration: 10,
       mediaItems: [
-        { type: "image", name: "@Image1.png", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198424419_ee362850.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198424419_ee362850.png" },
-        { type: "image", name: "@Image2.png", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198429287_84ec49b6.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198429287_84ec49b6.png" },
-        { type: "video", name: "@Video1.mp4", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198434181_cf552f9d.mp4", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198434181_cf552f9d.mp4" },
-        { type: "audio", name: "@Audio1.wav", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198438507_4514d989.wav", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198438507_4514d989.wav" },
+        { type: "image", name: "@Image1.png", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538452965_5c383288.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538452965_5c383288.png" },
+        { type: "image", name: "@Image2.png", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538456877_2f8d3d96.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538456877_2f8d3d96.png" },
+        { type: "video", name: "@Video1.mp4", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538460793_f57e860d.mp4", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538460793_f57e860d.mp4" },
+        { type: "audio", name: "@Audio1.wav", url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538464613_691ecf17.wav", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538464613_691ecf17.wav" },
       ]
     },
     response: {}
@@ -383,12 +383,12 @@ const DEMO_TASKS = {
   keyframes: {
     id: "demo-keyframes", demo: true, status: "completed",
     created: 0, endTime: 0,
-    videoUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198471834_d5f87a1e.mp4",
+    videoUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538481089_b2495afe.mp4",
     input: {
       prompt: "Silver magic erupts, armor snaps onto her body in rapid flashes. Camera pushes in then pulls back wide. Hair billows, shockwave ripples the ocean. Moonlit beach, flat vector style.",
       model: "seedance", refMode: "keyframes", ratio: "16:9", duration: 5,
-      kfFirst: { url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198449947_71598228.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198449947_71598228.png", name: "frame_start.png" },
-      kfLast: { url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198458190_87e8afc6.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/uploads/1775198458190_87e8afc6.png", name: "frame_end.png" },
+      kfFirst: { url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538472721_f2bcbb33.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538472721_f2bcbb33.png", name: "frame_start.png" },
+      kfLast: { url: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538476951_a184301d.png", cosUrl: "https://seedance-1394865241.cos.na-siliconvalley.myqcloud.com/tutorial/1775538476951_a184301d.png", name: "frame_end.png" },
     },
     response: {}
   }

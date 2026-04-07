@@ -362,20 +362,20 @@ const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
 // Purge legacy demo tasks from localStorage
 for (let i = tasks.length - 1; i >= 0; i--) { if (tasks[i].demo) tasks.splice(i, 1); }
 
-// Demo tasks (assets hosted on TOS)
+// Demo tasks (assets hosted on TOS — tutorial/ prefix, excluded from cleanup)
 const DEMO_TASKS = {
   all: {
     id: "demo-reference-zh", demo: true, status: "completed",
     created: 0, endTime: 0,
-    videoUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198760826_e24e74ca.mp4",
+    videoUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538500106_f97f0fab.mp4",
     input: {
       prompt: "@图片1 @图片2 模仿 @视频1 的动作和步伐，音乐参考 @音频1。",
       model: "seedance", refMode: "all", ratio: "16:9", duration: 10,
       mediaItems: [
-        { type: "image", name: "@图片1.png", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198757262_2505af63.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198757262_2505af63.png" },
-        { type: "image", name: "@图片2.png", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198758241_21ff25d2.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198758241_21ff25d2.png" },
-        { type: "video", name: "@视频1.mp4", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198759132_c21a1762.mp4", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198759132_c21a1762.mp4" },
-        { type: "audio", name: "@音频1.wav", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198759883_3cec064a.wav", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198759883_3cec064a.wav" },
+        { type: "image", name: "@图片1.png", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538496964_246bb024.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538496964_246bb024.png" },
+        { type: "image", name: "@图片2.png", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538497854_43f394ba.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538497854_43f394ba.png" },
+        { type: "video", name: "@视频1.mp4", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538498673_cd8c740b.mp4", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538498673_cd8c740b.mp4" },
+        { type: "audio", name: "@音频1.wav", url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538499332_26f377aa.wav", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538499332_26f377aa.wav" },
       ]
     },
     response: {}
@@ -383,12 +383,12 @@ const DEMO_TASKS = {
   keyframes: {
     id: "demo-keyframes-zh", demo: true, status: "completed",
     created: 0, endTime: 0,
-    videoUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198763931_b317d524.mp4",
+    videoUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538514705_b64603b2.mp4",
     input: {
       prompt: "银色魔法爆发，铠甲在闪光中迅速贴合她的身体。镜头先推进再拉远。头发飞扬，冲击波掠过海面。月光海滩，扁平矢量风格。",
       model: "seedance", refMode: "keyframes", ratio: "16:9", duration: 5,
-      kfFirst: { url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198761725_cf5ef972.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198761725_cf5ef972.png", name: "frame_start.png" },
-      kfLast: { url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198763017_3b5dfd82.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/uploads/1775198763017_3b5dfd82.png", name: "frame_end.png" },
+      kfFirst: { url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538500977_54f9e284.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538500977_54f9e284.png", name: "frame_start.png" },
+      kfLast: { url: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538513929_fe818ff6.png", cosUrl: "https://anyfast-seedance-web.tos-cn-beijing.volces.com/tutorial/1775538513929_fe818ff6.png", name: "frame_end.png" },
     },
     response: {}
   }
