@@ -125,7 +125,7 @@ a.s:hover{border-color:#999}
 .task:hover{border-color:#dde0e5}
 .task-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px 0}
 .task-header-left{display:flex;align-items:center;gap:8px}
-.tid{font-family:ui-monospace,monospace;font-size:11px;color:#aaa;letter-spacing:.3px}
+.tid{font-family:ui-monospace,monospace;font-size:11px;color:#555;font-weight:600;letter-spacing:.3px}
 .st{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;letter-spacing:.2px}
 .st.running{color:#0969da;background:#eef6ff}
 .st.completed{color:#1a7f37;background:#eafbef}
@@ -1225,17 +1225,17 @@ function buildRequest() {
   if (refMode === "keyframes") {
     // Keyframe mode: use kfFirst / kfLast
     if (kfFirst && kfFirst.url) {
-      content.push({ type: "image_url", image_url: { url: kfFirst.url }, role: "first_frame" });
+      content.push({ type: "image_url", image_url: { url: kfFirst.assetUrl || kfFirst.url }, role: "first_frame" });
     }
     if (kfLast && kfLast.url) {
-      content.push({ type: "image_url", image_url: { url: kfLast.url }, role: "last_frame" });
+      content.push({ type: "image_url", image_url: { url: kfLast.assetUrl || kfLast.url }, role: "last_frame" });
     }
   } else {
     // All-reference mode: use mediaItems stack
     for (const item of mediaItems) {
       if (!item.url) continue;
       if (item.type === "image") {
-        content.push({ type: "image_url", image_url: { url: item.url }, role: "reference_image" });
+        content.push({ type: "image_url", image_url: { url: item.assetUrl || item.url }, role: "reference_image" });
       } else if (item.type === "video") {
         content.push({ type: "video_url", video_url: { url: item.url }, role: "reference_video" });
       } else if (item.type === "audio") {
@@ -1326,24 +1326,25 @@ async function runSubmit(task, body) {
           console.log("[Generate] PrivacyInformation detected, creating assets...");
           task.status = "whitelisting";
           renderTasks();
-          // Build asset URL map without mutating global mediaItems/kfFirst/kfLast
-          const assetMap = new Map(); // cosUrl → asset://id
+          // Create assets sequentially (API rate-limited)
+          const assetMap = new Map();
           const imageUrls = currentBody.content.filter(c => c.type === "image_url").map(c => c.image_url.url);
-          await Promise.all(imageUrls.map(async (url) => {
-            if (url.startsWith("asset://")) return;
+          for (const url of imageUrls) {
+            if (url.startsWith("asset://")) continue;
             try {
               const id = await createImageAsset(url, "");
-              await new Promise(r => setTimeout(r, 5000));
               assetMap.set(url, "asset://" + id);
             } catch (err) { console.warn("[Generate] Asset creation failed for", url, err); }
-          }));
-          // Replace URLs in content without touching globals
-          currentBody = { ...currentBody, content: currentBody.content.map(c => {
-            if (c.type === "image_url" && assetMap.has(c.image_url.url)) {
-              return { ...c, image_url: { ...c.image_url, url: assetMap.get(c.image_url.url) } };
-            }
-            return c;
-          })};
+          }
+          // Save asset URLs on global items for reuse in future requests
+          for (const [cosUrl, assetUrl] of assetMap) {
+            const item = mediaItems.find(m => (m.cosUrl || m.url) === cosUrl);
+            if (item) item.assetUrl = assetUrl;
+            if (kfFirst && (kfFirst.cosUrl || kfFirst.url) === cosUrl) kfFirst.assetUrl = assetUrl;
+            if (kfLast && (kfLast.cosUrl || kfLast.url) === cosUrl) kfLast.assetUrl = assetUrl;
+          }
+          // Rebuild body with asset URLs
+          currentBody = buildRequest();
           console.log("[Generate] Retrying with asset URLs...");
           continue;
         }
@@ -1560,17 +1561,19 @@ function renderOneTask(t) {
   const removeBtn = t.demo
     ? `<button class="task-remove" onclick="dismissDemo('${escJs(t.id)}')" title="Remove">×</button>`
     : `<button class="task-remove" onclick="removeTask('${escJs(key)}')" title="Remove">×</button>`;
+  const tidHtml = t.id ? `<span class="tid">${t.id}</span>` : "";
+  const errorInline = (t.status === "failed" && t.error) ? `<span style="font-size:11px;color:#cf222e;font-weight:500">${esc(t.error)}</span>` : "";
   let h = `<div class="task" id="task-${key}">`;
-  h += `<div class="task-header"><div class="task-header-left">${demoBadge}<span class="st ${t.status}">${liveIcon}${SL[t.status]||t.status}</span>${t.progress?`<span style="font-size:10px;color:#0969da">${t.progress}</span>`:""}</div>`;
+  h += `<div class="task-header"><div class="task-header-left">${demoBadge}<span class="st ${t.status}">${liveIcon}${SL[t.status]||t.status}</span>${tidHtml}${errorInline}${t.progress?`<span style="font-size:10px;color:#0969da">${t.progress}</span>`:""}</div>`;
   h += `<div class="task-header-right">${t.demo?"":`<span class="task-elapsed" data-elapsed="${key}">${elapsed(t)}</span>`}${removeBtn}</div></div>`;
   h += `<div class="task-body">`;
   h += renderTaskInput(t);
-  if (t.error) h += `<div class="task-error">${esc(t.error)}</div>`;
   if (t.videoUrl) {
     h += `<video class="task-video" src="${esc(t.videoUrl)}" controls preload="metadata"></video>`;
     if (!t.demo) h += `<div class="task-actions"><input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()"><button onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">Copy</button><a href="${esc(t.videoUrl)}" target="_blank" download class="s">Save</a></div>`;
   }
-  if (!t.demo) h += `<details class="task-json"><summary>Response</summary><div class="rj">${esc(JSON.stringify(t.response,null,2))}</div></details>`;
+  const detailsOpen = t.status === "failed" ? " open" : "";
+  if (!t.demo) h += `<details class="task-json"${detailsOpen}><summary>Response</summary><div class="rj">${esc(JSON.stringify(t.response,null,2))}</div></details>`;
   h += `</div></div>`;
   return h;
 }
