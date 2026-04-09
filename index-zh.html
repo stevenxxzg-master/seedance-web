@@ -1130,7 +1130,7 @@ async function handleFileForItem(id, file) {
     console.log(`[Upload] ${item.type} uploaded to COS:`, fileUrl);
     renderStack();
   } catch (err) {
-    alert("上传失败，请重试");
+    alert("上传失败：" + (err.message || "请重试"));
     removeMediaItem(id);
   } finally {
     pendingUploads--;
@@ -1199,7 +1199,7 @@ async function uploadKfFile(which, file) {
     obj.url = presign.fileUrl;
     obj.cosUrl = presign.fileUrl;
   } catch (err) {
-    alert("上传失败，请重试");
+    alert("上传失败：" + (err.message || "请重试"));
     if (which === "first") kfFirst = null; else kfLast = null;
     renderKfCard(which);
   }
