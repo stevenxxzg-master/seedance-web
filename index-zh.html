@@ -1359,7 +1359,7 @@ async function runSubmit(task, body) {
         task.progress = parsed.progress;
         task.response = data;
         task.videoUrl = parsed.videoUrl;
-        task.created = Date.now(); // reset timer to generation start
+        task.startTime = Date.now(); // reset timer to generation start
         if (["completed","failed","cancelled"].includes(parsed.status)) task.endTime = Date.now();
         saveTasks(); renderTasks();
         if (parsed.id) startPolling();
@@ -1381,7 +1381,7 @@ async function runSubmit(task, body) {
 
 // ── Task management ──
 function saveTasks() {
-  const slim = tasks.filter(t => t.id).slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response, input:t.input }));
+  const slim = tasks.filter(t => t.id).slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, startTime:t.startTime, videoUrl:t.videoUrl, endTime:t.endTime, response:t.response, input:t.input }));
   localStorage.setItem("tasks", JSON.stringify(slim));
 }
 
@@ -1430,7 +1430,8 @@ function findVideoUrl(d) {
 }
 
 function fmtTime(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000),m=Math.floor(s/60);return m>0?`${m}m ${s%60}s`:`${s}s`}
-function elapsed(t){return fmtTime((t.endTime||Date.now())-t.created)}
+const TERMINAL_STATES=["completed","failed","cancelled"];
+function elapsed(t){const start=t.startTime||t.created;const end=t.endTime||Date.now();return fmtTime(end-start)}
 
 function renderTaskInput(t) {
   if (!t.input) return '';
@@ -1627,7 +1628,7 @@ function friendlyError(msg) {
 function esc(s){const d=document.createElement("div");d.textContent=s==null?"":s;return d.innerHTML}
 function escJs(s){return (s==null?"":String(s)).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"')}
 
-setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const key=el.dataset.elapsed;const task=tasks.find(t=>(t.id||("_"+t.created))===key);if(task&&!task.endTime)el.textContent=elapsed(task)})},1000);
+setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const key=el.dataset.elapsed;const task=tasks.find(t=>(t.id||("_"+t.created))===key);if(task&&!TERMINAL_STATES.includes(task.status))el.textContent=elapsed(task)})},1000);
 
 // ── Auto Asset Creation ──
 let cachedGroupId = null;
