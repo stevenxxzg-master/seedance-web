@@ -1126,7 +1126,8 @@ async function handleFileForItem(id, file) {
       if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     }
     item.url = fileUrl;
-    item.cosUrl = fileUrl; // Persist COS URL for display (blob URLs expire)
+    item.cosUrl = fileUrl;
+    item.assetUrl = ""; // Clear stale asset — new file needs fresh asset if needed
     console.log(`[Upload] ${item.type} uploaded to COS:`, fileUrl);
     renderStack();
   } catch (err) {
@@ -1317,12 +1318,13 @@ async function runSubmit(task, body) {
       console.log(`[Generate] Attempt ${attempt}/3...`);
       const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(currentBody) });
       const data = await resp.json();
-      const errMsg = data.error?.message || data.message || "";
+      const errMsg = (typeof data.error === "string" ? data.error : data.error?.message) || data.message || data.msg || "";
       if (!resp.ok || (data.code && data.code !== "success")) {
         lastErr = errMsg || JSON.stringify(data);
+        const rawJson = JSON.stringify(data);
         console.warn(`[Generate] Attempt ${attempt} failed:`, lastErr);
         // PrivacyInformation → create assets, update task status, retry
-        if (lastErr.includes("PrivacyInformation") && attempt < 3) {
+        if ((lastErr.includes("PrivacyInformation") || rawJson.includes("PrivacyInformation")) && attempt < 3) {
           console.log("[Generate] PrivacyInformation detected, creating assets...");
           task.status = "whitelisting";
           renderTasks();
