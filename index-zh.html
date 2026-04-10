@@ -1328,6 +1328,7 @@ async function runSubmit(task, body) {
         if ((lastErr.includes("PrivacyInformation") || rawJson.includes("PrivacyInformation")) && attempt < 3) {
           console.log("[Generate] PrivacyInformation detected, creating assets...");
           task.status = "whitelisting";
+          task.whitelistStart = Date.now();
           renderTasks();
           // Create assets sequentially (API rate-limited)
           const assetMap = new Map();
@@ -1432,7 +1433,7 @@ function findVideoUrl(d) {
 
 function fmtSec(s){if(s<0)s=0;s=Math.floor(s);const m=Math.floor(s/60);return m>0?`${m}m ${s%60}s`:`${s}s`}
 const TERMINAL_STATES=["completed","failed","cancelled"];
-function elapsed(t){if(t.apiCreatedAt){const end=t.apiUpdatedAt||Math.floor(Date.now()/1000);return fmtSec(end-t.apiCreatedAt)}const start=t.startTime||t.created;return fmtSec(((t.endTime||Date.now())-start)/1000)}
+function elapsed(t){if(t.status==="whitelisting"&&t.whitelistStart)return"加白 "+fmtSec((Date.now()-t.whitelistStart)/1000);if(t.apiCreatedAt){const end=t.apiUpdatedAt||Math.floor(Date.now()/1000);return fmtSec(end-t.apiCreatedAt)}const start=t.startTime||t.created;return fmtSec(((t.endTime||Date.now())-start)/1000)}
 
 function renderTaskInput(t) {
   if (!t.input) return '';
@@ -1561,7 +1562,7 @@ function restoreInput(taskId) {
 }
 
 function renderOneTask(t) {
-  const SL = {submitting:"提交中",whitelisting:"处理中",submitted:"已提交",processing:"生成中",running:"生成中",completed:"完成",failed:"失败",cancelled:"已取消"};
+  const SL = {submitting:"提交中",whitelisting:"素材加白中",submitted:"已提交",processing:"生成中",running:"生成中",completed:"完成",failed:"失败",cancelled:"已取消"};
   const isLive = t.status === "submitting" || t.status === "whitelisting";
   const liveIcon = isLive ? `<span style="display:inline-block;width:8px;height:8px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:3px"></span>` : "";
   const key = t.id || ("_" + t.created);
