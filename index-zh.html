@@ -1359,6 +1359,8 @@ async function runSubmit(task, body) {
         task.progress = parsed.progress;
         task.response = data;
         task.videoUrl = parsed.videoUrl;
+        task.created = Date.now(); // reset timer to generation start
+        if (["completed","failed","cancelled"].includes(parsed.status)) task.endTime = Date.now();
         saveTasks(); renderTasks();
         if (parsed.id) startPolling();
         return;
@@ -1371,6 +1373,7 @@ async function runSubmit(task, body) {
   }
   // All attempts failed
   task.status = "failed";
+  task.endTime = Date.now();
   task.error = friendlyError(lastErr);
   task.response = { _error: lastErr };
   saveTasks(); renderTasks();
