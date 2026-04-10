@@ -1247,6 +1247,7 @@ function buildRequest() {
 
   const body = {
     model: document.getElementById("i-model").value,
+    prompt,
     content,
     resolution: document.getElementById("i-res").value,
     ratio: document.getElementById("i-ratio").value,
@@ -1345,8 +1346,11 @@ async function runSubmit(task, body) {
             if (kfFirst && (kfFirst.cosUrl || kfFirst.url) === cosUrl) kfFirst.assetUrl = assetUrl;
             if (kfLast && (kfLast.cosUrl || kfLast.url) === cosUrl) kfLast.assetUrl = assetUrl;
           }
-          // Rebuild body with asset URLs
+          // Rebuild body with asset URLs, preserve original prompt
           currentBody = buildRequest();
+          const hasText = currentBody.content.some(c => c.type === "text");
+          const origText = body.content.find(c => c.type === "text");
+          if (!hasText && origText) currentBody.content.unshift(origText);
           console.log("[Generate] Retrying with asset URLs...");
           continue;
         }
