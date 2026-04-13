@@ -1302,7 +1302,7 @@ async function handleFileForItem(id, file) {
       const resp = await fetch("/api/upload/video", { method: "POST", body: form });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Upload failed: ${resp.status}`);
+        throw new Error(err.error || `上传失败（${resp.status}）`);
       }
       ({ fileUrl } = await resp.json());
       // Video is already in uploads/ — try to register with hash if possible (skip hash for now)
@@ -1330,7 +1330,7 @@ async function handleFileForItem(id, file) {
       registerAssetOnUpload(item);
     }
   } catch (err) {
-    alert("上传失败：" + (err.message || "请重试"));
+    alert(translateError(err.message) || ("上传失败：" + (err.message || "请重试")));
     removeMediaItem(id);
   } finally {
     pendingUploads--;
@@ -1402,7 +1402,7 @@ async function uploadKfFile(which, file) {
       registerAssetOnUpload({ name: file.name, type: "image", cosUrl: fileUrl, url: fileUrl, contentHash: hash });
     }
   } catch (err) {
-    alert("上传失败：" + (err.message || "请重试"));
+    alert(translateError(err.message) || ("上传失败：" + (err.message || "请重试")));
     if (which === "first") kfFirst = null; else kfLast = null;
     renderKfCard(which);
   }
@@ -1485,7 +1485,7 @@ async function generate() {
     console.log("[Generate] Request body:", JSON.stringify(body, null, 2));
     if (body.content.length === 0) {
       btn.disabled = false; btn.classList.remove("sending");
-      alert("Please add a prompt or media before generating."); return;
+      alert("请先输入提示词或添加素材"); return;
     }
     const inputSnapshot = {
       prompt: getPromptText().trim(),
@@ -1830,19 +1830,98 @@ function removeTask(key) {
   renderTasks();
 }
 function clearTasks(){if(!confirm("确认清空所有任务记录？"))return;tasks.length=0;saveTasks();renderTasks()}
+// Strip noise (request id, trailing parenthetical identifiers) so translation matching is cleaner.
+function stripErrorNoise(msg) {
+  if (!msg) return "";
+  return String(msg)
+    .replace(/\s*\(request id:[^)]*\)/gi, "")
+    .replace(/\s*request id[:：][^\s,，)]+/gi, "")
+    .trim();
+}
+
+// Translate a raw error string to Chinese. Returns null if no rule matched —
+// callers can then decide how to fall back.
+function translateError(raw) {
+  const msg = stripErrorNoise(raw);
+  if (!msg) return null;
+  const m = msg.toLowerCase();
+
+  // ── Gateway / auth ────────────────────────────────────────
+  if (msg.includes("无效的令牌") || msg.includes("无效令牌") || m.includes("invalid token"))
+    return "API Key 无效，请检查设置或更换有效的 Key";
+  if (msg === "API Key is required" || msg === "API Key required")
+    return "请先填写 API Key";
+  if (m.includes("401") || m.includes("unauthorized"))
+    return "API Key 无效，请检查设置";
+  if (m.includes("403") || m.includes("forbidden"))
+    return "权限不足，无法访问该接口";
+  if (m.includes("invalid api base") || m.includes("only https base urls"))
+    return "API Base URL 无效，请填写 https 开头的公网地址";
+
+  // ── AnyFast proxy specific ─────────────────────────────────
+  if (m.includes("unsupported asset action"))
+    return "该素材操作暂不支持，请联系服务管理员开通";
+  if (msg.includes("价格未配置") || m.includes("price not set") || m.includes("price not configured"))
+    return "模型计费未配置，请联系服务管理员";
+  if (m.includes("get_channel_failed") || msg.includes("可用渠道不存在"))
+    return "服务渠道暂时不可用，请稍后重试";
+  if (m.includes("quota") || m.includes("insufficient balance") || m.includes("out of credit")
+      || msg.includes("额度") || msg.includes("余额不足"))
+    return "账户额度不足，请充值后重试";
+
+  // ── Content / media ────────────────────────────────────────
+  if (msg.includes("SensitiveContent") || msg.includes("PrivacyInformation"))
+    return "图片内容不符合规范，请更换图片";
+  if (m.includes("content moderation") || msg.includes("内容审核"))
+    return "内容审核未通过，请调整提示词或素材";
+  if (m.includes("image_url"))
+    return "图片处理异常，请重新上传图片后重试";
+  if (m.includes("resolve asset") || msg.includes("素材处理中"))
+    return "素材处理中，请稍后重试";
+  if (msg.includes("Asset whitelisting failed") || msg.includes("asset whitelisting failed"))
+    return "素材加白失败，请更换图片后重试";
+  if (msg.includes("Asset whitelisting timeout"))
+    return "素材加白超时，请稍后重试";
+  if (msg.includes("Asset not found") || msg.includes("asset not found"))
+    return "未找到该素材";
+  if (msg.includes("storageUrls array required"))
+    return "素材参数错误";
+
+  // ── Rate / quota / timeout ─────────────────────────────────
+  if (m.includes("rate limit") || m.includes("ratelimit") || m.includes("too many requests") || m.includes("429"))
+    return "请求过于频繁，请稍后重试";
+  if (m.includes("timeout") || m.includes("timed out"))
+    return "服务繁忙，请稍后重试";
+
+  // ── Network ────────────────────────────────────────────────
+  if (m.includes("networkerror") || m.includes("failed to fetch") || m.includes("network error") || m === "网络错误")
+    return "网络连接失败，请检查网络";
+  if (m.includes("502") || m.includes("bad gateway"))
+    return "服务暂时不可用（502），请稍后重试";
+  if (m.includes("503") || m.includes("service unavailable"))
+    return "服务暂时不可用（503），请稍后重试";
+  if (m.includes("504") || m.includes("gateway timeout"))
+    return "服务响应超时，请稍后重试";
+  if (/^http\s*5\d\d/i.test(m))
+    return "服务器异常，请稍后重试";
+
+  // ── Upload ─────────────────────────────────────────────────
+  if (m.includes("upload failed") || msg === "上传失败")
+    return "上传失败，请重试";
+  if (msg === "获取上传地址失败")
+    return msg;
+
+  return null;
+}
+
 function friendlyError(msg) {
   if (!msg) return "生成失败，请重试";
-  if (msg.includes("timeout") || msg.includes("Timeout")) return "服务繁忙，请稍后重试";
-  if (msg.includes("resolve asset")) return "素材处理中，请稍后重试";
-  if (msg.includes("image_url")) return "图片处理异常，请重新上传图片后重试";
-  if (msg.includes("SensitiveContent") || msg.includes("PrivacyInformation")) return "图片内容不符合规范，请更换图片";
-  if (msg.includes("content moderation")) return "内容审核未通过，请调整提示词或素材";
-  if (msg.includes("rate limit") || msg.includes("RateLimit")) return "请求过于频繁，请稍后重试";
-  if (msg.includes("401") || msg.includes("Unauthorized")) return "API Key 无效，请检查设置";
-  if (msg.includes("NetworkError") || msg.includes("Failed to fetch")) return "网络连接失败，请检查网络";
+  const translated = translateError(msg);
+  if (translated) return translated;
+  const cleaned = stripErrorNoise(msg);
   // Truncate long technical messages
-  if (msg.length > 80) return "生成失败：" + msg.slice(0, 60) + "...";
-  return "生成失败：" + msg;
+  if (cleaned.length > 80) return "生成失败：" + cleaned.slice(0, 60) + "…";
+  return "生成失败：" + cleaned;
 }
 function esc(s){const d=document.createElement("div");d.textContent=s==null?"":s;return d.innerHTML}
 function escJs(s){return (s==null?"":String(s)).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"')}
@@ -2090,7 +2169,7 @@ async function handleAssetUpload(files) {
       console.error("[AssetUpload] Upload failed:", file.name, e.message);
       const idx = assetLibrary.findIndex(a => a.id === placeholderId);
       if (idx >= 0) assetLibrary.splice(idx, 1);
-      alert("上传失败：" + file.name + " — " + e.message);
+      alert("上传失败：" + file.name + " — " + (translateError(e.message) || e.message));
     } finally {
       URL.revokeObjectURL(localUrl);
     }
