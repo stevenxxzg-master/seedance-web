@@ -415,111 +415,115 @@ app.post("/api/tos/upload-video", upload.single("file"), async (req, res) => {
   }
 });
 
-// ── Volcengine Asset API (server-side AK/SK from env) ──
-const VOLC_VERSION = "2024-01-01";
-const VOLC_AK = process.env.VOLC_AK;
-const VOLC_SK = process.env.VOLC_SK;
-
-const volcService = VOLC_AK && VOLC_SK
-  ? new (require("@volcengine/openapi").Service)({
-      host: "open.volcengineapi.com",
-      serviceName: "ark",
-      region: "cn-beijing",
-      accessKeyId: VOLC_AK,
-      secretKey: VOLC_SK,
-      defaultVersion: VOLC_VERSION,
-    })
-  : null;
+// ── Volcengine Asset API (proxied via AnyFast gateway so calls are metered) ──
+// Calls go to `${X-Api-Base}/volc/asset/<Action>` with the user's own Bearer key,
+// instead of directly hitting open.volcengineapi.com with server-side AK/SK.
+const VOLC_PROXY_MODEL = "volc-asset";
 
 const ALLOWED_ASSET_ACTIONS = new Set([
   "CreateAssetGroup", "CreateAsset", "ListAssetGroups", "ListAssets",
   "GetAsset", "GetAssetGroup", "UpdateAssetGroup", "UpdateAsset",
 ]);
 
-app.post("/api/asset/:action", async (req, res) => {
-  if (!volcService) return res.status(503).json({ error: "Asset API not configured" });
-
-  const { action } = req.params;
-  if (!ALLOWED_ASSET_ACTIONS.has(action)) {
-    return res.status(400).json({ error: "Invalid action" });
+async function volcAssetCall(req, action, body) {
+  const base = getBase(req);
+  const key = getKey(req);
+  const resp = await fetch(`${base}/volc/asset/${action}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({ ...body, model: VOLC_PROXY_MODEL }),
+  });
+  let data;
+  const text = await resp.text();
+  try { data = JSON.parse(text); } catch { data = { error: text }; }
+  if (!resp.ok) {
+    const msg = data?.error || data?.ResponseMetadata?.Error?.Message || `HTTP ${resp.status}`;
+    throw new Error(msg);
   }
-
-  try {
-    const api = volcService.createJSONAPI(action, { Version: VOLC_VERSION, method: "POST" });
-    const data = await api(req.body);
-    if (data?.ResponseMetadata?.Error) {
-      return res.status(400).json(data);
-    }
-    res.json(data);
-  } catch (err) {
-    console.error(`Asset API ${action} error:`, err);
-    res.status(502).json({ error: err.message });
-  }
-});
-
-// ── Server-side Asset Group Management ──
-let _cachedGroupId = null;
-let _cachedGroupCount = 0;
-let _groupLock = null;
-
-async function volcAssetCall(action, body) {
-  if (!volcService) throw new Error("Asset API not configured");
-  const api = volcService.createJSONAPI(action, { Version: VOLC_VERSION, method: "POST" });
-  const data = await api(body);
   if (data?.ResponseMetadata?.Error) {
     throw new Error(data.ResponseMetadata.Error.Message || "Asset API error");
   }
   return data.Result || data;
 }
 
-async function serverEnsureAssetGroup() {
-  if (_cachedGroupId && _cachedGroupCount < 64) return _cachedGroupId;
-  if (_groupLock) {
-    await _groupLock;
-    if (_cachedGroupId && _cachedGroupCount < 64) return _cachedGroupId;
+app.post("/api/asset/:action", async (req, res) => {
+  const { action } = req.params;
+  if (!ALLOWED_ASSET_ACTIONS.has(action)) {
+    return res.status(400).json({ error: "Invalid action" });
+  }
+  try {
+    const data = await volcAssetCall(req, action, req.body || {});
+    res.json(data);
+  } catch (err) {
+    console.error(`Asset API ${action} error:`, err.message);
+    const code = err.message === "API Key is required" ? 401
+      : err.message?.includes("Invalid API base") ? 400 : 502;
+    res.status(code).json({ error: err.message });
+  }
+});
+
+// ── Server-side Asset Group Management ──
+// Cache keyed by (base|key) so different users/gateways don't collide.
+const _groupCache = new Map();
+const _groupLocks = new Map();
+
+async function serverEnsureAssetGroup(req) {
+  const cacheKey = getBase(req) + "|" + getKey(req);
+  const cached = _groupCache.get(cacheKey);
+  if (cached && cached.count < 64) return cached.id;
+
+  const existingLock = _groupLocks.get(cacheKey);
+  if (existingLock) {
+    await existingLock;
+    const after = _groupCache.get(cacheKey);
+    if (after && after.count < 64) return after.id;
   }
   let resolve;
-  _groupLock = new Promise((r) => { resolve = r; });
+  const lock = new Promise((r) => { resolve = r; });
+  _groupLocks.set(cacheKey, lock);
   try {
-    const list = await volcAssetCall("ListAssetGroups", {
+    const list = await volcAssetCall(req, "ListAssetGroups", {
       Filter: { GroupType: "AIGC" }, PageNumber: 1, PageSize: 100,
     });
     const groups = (list.Items || []).filter((g) => !g.Name?.startsWith("__del__"));
     for (const g of groups) {
-      const assets = await volcAssetCall("ListAssets", {
+      const assets = await volcAssetCall(req, "ListAssets", {
         Filter: { GroupIds: [g.Id], GroupType: "AIGC" }, PageNumber: 1, PageSize: 1,
       });
       const count = assets.TotalCount || 0;
       if (count < 64) {
-        _cachedGroupId = g.Id;
-        _cachedGroupCount = count;
+        _groupCache.set(cacheKey, { id: g.Id, count });
         return g.Id;
       }
     }
     const name = "auto-assets-" + Date.now();
-    const created = await volcAssetCall("CreateAssetGroup", { Name: name, GroupType: "AIGC" });
-    _cachedGroupId = created.Id;
-    _cachedGroupCount = 0;
+    const created = await volcAssetCall(req, "CreateAssetGroup", { Name: name, GroupType: "AIGC" });
+    _groupCache.set(cacheKey, { id: created.Id, count: 0 });
     return created.Id;
   } finally {
-    _groupLock = null;
+    _groupLocks.delete(cacheKey);
     resolve();
   }
 }
 
-async function serverCreateImageAsset(url, name) {
-  const groupId = await serverEnsureAssetGroup();
-  const res = await volcAssetCall("CreateAsset", {
+async function serverCreateImageAsset(req, url, name) {
+  const groupId = await serverEnsureAssetGroup(req);
+  const result = await volcAssetCall(req, "CreateAsset", {
     GroupId: groupId, URL: url, AssetType: "Image", Name: (name || "image").slice(0, 60),
   });
-  _cachedGroupCount++;
-  const assetId = res.Id;
+  const cacheKey = getBase(req) + "|" + getKey(req);
+  const entry = _groupCache.get(cacheKey);
+  if (entry) entry.count++;
+  const assetId = result.Id;
   // Poll GetAsset until Active (or Failed) — max 60s
   const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
-      const got = await volcAssetCall("GetAsset", { Id: assetId });
+      const got = await volcAssetCall(req, "GetAsset", { Id: assetId });
       const status = got.Status;
       console.log(`[Asset ${assetId}] Status: ${status}`);
       if (status === "Active") return assetId;
@@ -592,7 +596,7 @@ app.post("/api/assets/:id/whitelist", async (req, res) => {
     }
     updateAssetStatus(id, userHash, { assetId: null, assetStatus: "pending" });
     try {
-      const volcId = await serverCreateImageAsset(asset.storage_url, asset.name);
+      const volcId = await serverCreateImageAsset(req, asset.storage_url, asset.name);
       const updated = updateAssetStatus(id, userHash, {
         assetId: "asset://" + volcId, assetStatus: "ready",
       });
@@ -622,12 +626,29 @@ app.delete("/api/assets/:id", (req, res) => {
   }
 });
 
+// Derive a readable default name from a storage URL (last path segment, decoded, truncated)
+function deriveNameFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const raw = pathname.split("/").filter(Boolean).pop() || "image";
+    return decodeURIComponent(raw).slice(0, 60);
+  } catch {
+    return "image";
+  }
+}
+
 // Bulk whitelist — for PrivacyInformation auto-retry
 app.post("/api/assets/bulk-whitelist", async (req, res) => {
   try {
     const userHash = getUserHash(req);
-    const { storageUrls } = req.body;
+    const { storageUrls, items } = req.body;
     if (!Array.isArray(storageUrls)) return res.status(400).json({ error: "storageUrls array required" });
+    const meta = new Map();
+    if (Array.isArray(items)) {
+      for (const it of items) {
+        if (it && typeof it.url === "string") meta.set(it.url, it);
+      }
+    }
     const results = {};
     for (const url of storageUrls) {
       const existing = findAssetByUrl(userHash, url);
@@ -635,9 +656,18 @@ app.post("/api/assets/bulk-whitelist", async (req, res) => {
         results[url] = existing.asset_id;
         continue;
       }
-      const row = existing || insertAsset({ userHash, name: "", type: "image", storageUrl: url, thumbUrl: url });
+      const hint = meta.get(url) || {};
+      const name = existing?.name || hint.name || deriveNameFromUrl(url);
+      const contentHash = hint.contentHash || undefined;
+      const row = existing || insertAsset({ userHash, name, type: "image", storageUrl: url, thumbUrl: url, contentHash });
+      // insertAsset may have returned an older record (hash-matched) that's already whitelisted.
+      // Reuse its asset_id instead of burning another Volc call.
+      if (row.asset_status === "ready" && row.asset_id) {
+        results[url] = row.asset_id;
+        continue;
+      }
       try {
-        const volcId = await serverCreateImageAsset(url, "");
+        const volcId = await serverCreateImageAsset(req, url, name);
         updateAssetStatus(row.id, userHash, { assetId: "asset://" + volcId, assetStatus: "ready" });
         results[url] = "asset://" + volcId;
       } catch (e) {

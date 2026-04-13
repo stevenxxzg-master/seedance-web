@@ -1301,7 +1301,14 @@ async function handleFileForItem(id, file) {
     item.assetUrl = reusedAsset?.asset_id || "";
     console.log(`[Upload] ${item.type} uploaded:`, fileUrl, reused ? "(reused)" : "");
     renderStack();
-    registerAssetOnUpload(item);
+    if (reused && reusedAsset) {
+      const existingIdx = assetLibrary.findIndex(a => a.id === reusedAsset.id);
+      if (existingIdx >= 0) assetLibrary.splice(existingIdx, 1);
+      assetLibrary.unshift(reusedAsset);
+      renderAssetGrid();
+    } else {
+      registerAssetOnUpload(item);
+    }
   } catch (err) {
     alert("Upload failed: " + (err.message || "Please retry"));
     removeMediaItem(id);
@@ -1366,7 +1373,14 @@ async function uploadKfFile(which, file) {
     obj.contentHash = hash;
     obj.assetUrl = asset?.asset_id || "";
     console.log(`[KF Upload] ${which} uploaded:`, fileUrl, reused ? "(reused)" : "");
-    registerAssetOnUpload({ name: file.name, type: "image", cosUrl: fileUrl, url: fileUrl, contentHash: hash });
+    if (reused && asset) {
+      const existingIdx = assetLibrary.findIndex(a => a.id === asset.id);
+      if (existingIdx >= 0) assetLibrary.splice(existingIdx, 1);
+      assetLibrary.unshift(asset);
+      renderAssetGrid();
+    } else {
+      registerAssetOnUpload({ name: file.name, type: "image", cosUrl: fileUrl, url: fileUrl, contentHash: hash });
+    }
   } catch (err) {
     alert("Upload failed: " + (err.message || "Please retry"));
     if (which === "first") kfFirst = null; else kfLast = null;
@@ -1501,9 +1515,16 @@ async function runSubmit(task, body) {
           const imageUrls = currentBody.content.filter(c => c.type === "image_url").map(c => c.image_url.url).filter(u => !u.startsWith("asset://"));
           if (imageUrls.length > 0) {
             try {
+              const lookupItem = (u) => mediaItems.find(m => (m.cosUrl || m.url) === u)
+                || (kfFirst && (kfFirst.cosUrl || kfFirst.url) === u ? kfFirst : null)
+                || (kfLast && (kfLast.cosUrl || kfLast.url) === u ? kfLast : null);
+              const items = imageUrls.map(u => {
+                const it = lookupItem(u);
+                return { url: u, contentHash: it?.contentHash || "", name: it?.name || "" };
+              });
               const resp = await fetch("/api/assets/bulk-whitelist", {
                 method: "POST", headers: assetHeaders(),
-                body: JSON.stringify({ storageUrls: imageUrls }),
+                body: JSON.stringify({ storageUrls: imageUrls, items }),
               });
               const { results } = await resp.json();
               for (const [cosUrl, assetUrl] of Object.entries(results || {})) {
@@ -1513,6 +1534,7 @@ async function runSubmit(task, body) {
                 if (kfFirst && (kfFirst.cosUrl || kfFirst.url) === cosUrl) kfFirst.assetUrl = assetUrl;
                 if (kfLast && (kfLast.cosUrl || kfLast.url) === cosUrl) kfLast.assetUrl = assetUrl;
               }
+              loadAssetLibrary();
             } catch (e) { console.warn("[Generate] Bulk whitelist failed:", e.message); }
           }
           currentBody = buildRequest();
@@ -1813,7 +1835,12 @@ let assetLibrary = [];
 let _assetLoading = false;
 
 function assetHeaders() {
-  return { "X-Api-Key": document.getElementById("i-key").value.trim(), "Content-Type": "application/json" };
+  const key = document.getElementById("i-key").value.trim();
+  const base = document.getElementById("i-base").value.trim();
+  const h = { "Content-Type": "application/json" };
+  if (key) h["X-Api-Key"] = key;
+  if (base) h["X-Api-Base"] = encodeURI(base);
+  return h;
 }
 
 // ── Toast notifications ──
@@ -2126,6 +2153,7 @@ async function registerAssetOnUpload(item) {
         const idx = assetLibrary.findIndex(a => a.id === data.asset.id);
         if (idx >= 0) assetLibrary[idx] = data.asset;
         else assetLibrary.unshift(data.asset);
+        renderAssetGrid();
       }
     }
   } catch (e) { console.warn("[AssetLib] Register failed:", e.message); }
