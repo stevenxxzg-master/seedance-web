@@ -10,6 +10,11 @@ import { createReadStream, readFileSync, unlinkSync, mkdirSync } from "fs";
 import { createRequire } from "module";
 import multer from "multer";
 import os from "os";
+import {
+  hashApiKey, listAssets, findAssetByUrl, insertAsset,
+  updateAssetStatus, deleteAsset as dbDeleteAsset,
+  getPrefs, setPrefs,
+} from "./db.js";
 
 const require = createRequire(import.meta.url);
 
@@ -23,7 +28,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && (origin.includes("anyfast.com.cn") || origin.includes("anyfast.ai"))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-Api-Key,X-Storage,Authorization");
     if (req.method === "OPTIONS") return res.sendStatus(204);
   }
@@ -446,6 +451,206 @@ app.post("/api/asset/:action", async (req, res) => {
   } catch (err) {
     console.error(`Asset API ${action} error:`, err);
     res.status(502).json({ error: err.message });
+  }
+});
+
+// ── Server-side Asset Group Management ──
+let _cachedGroupId = null;
+let _cachedGroupCount = 0;
+let _groupLock = null;
+
+async function volcAssetCall(action, body) {
+  if (!volcService) throw new Error("Asset API not configured");
+  const api = volcService.createJSONAPI(action, { Version: VOLC_VERSION, method: "POST" });
+  const data = await api(body);
+  if (data?.ResponseMetadata?.Error) {
+    throw new Error(data.ResponseMetadata.Error.Message || "Asset API error");
+  }
+  return data.Result || data;
+}
+
+async function serverEnsureAssetGroup() {
+  if (_cachedGroupId && _cachedGroupCount < 64) return _cachedGroupId;
+  if (_groupLock) {
+    await _groupLock;
+    if (_cachedGroupId && _cachedGroupCount < 64) return _cachedGroupId;
+  }
+  let resolve;
+  _groupLock = new Promise((r) => { resolve = r; });
+  try {
+    const list = await volcAssetCall("ListAssetGroups", {
+      Filter: { GroupType: "AIGC" }, PageNumber: 1, PageSize: 100,
+    });
+    const groups = (list.Items || []).filter((g) => !g.Name?.startsWith("__del__"));
+    for (const g of groups) {
+      const assets = await volcAssetCall("ListAssets", {
+        Filter: { GroupIds: [g.Id], GroupType: "AIGC" }, PageNumber: 1, PageSize: 1,
+      });
+      const count = assets.TotalCount || 0;
+      if (count < 64) {
+        _cachedGroupId = g.Id;
+        _cachedGroupCount = count;
+        return g.Id;
+      }
+    }
+    const name = "auto-assets-" + Date.now();
+    const created = await volcAssetCall("CreateAssetGroup", { Name: name, GroupType: "AIGC" });
+    _cachedGroupId = created.Id;
+    _cachedGroupCount = 0;
+    return created.Id;
+  } finally {
+    _groupLock = null;
+    resolve();
+  }
+}
+
+async function serverCreateImageAsset(url, name) {
+  const groupId = await serverEnsureAssetGroup();
+  const res = await volcAssetCall("CreateAsset", {
+    GroupId: groupId, URL: url, AssetType: "Image", Name: (name || "image").slice(0, 60),
+  });
+  _cachedGroupCount++;
+  const assetId = res.Id;
+  // Poll GetAsset until Active (or Failed) — max 60s
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const got = await volcAssetCall("GetAsset", { Id: assetId });
+      const status = got.Status;
+      console.log(`[Asset ${assetId}] Status: ${status}`);
+      if (status === "Active") return assetId;
+      if (status === "Failed" || status === "failed") {
+        throw new Error("Asset whitelisting failed: " + (got.FailReason || "unknown"));
+      }
+    } catch (e) {
+      if (e.message?.includes("Asset whitelisting failed")) throw e;
+      console.warn(`[Asset ${assetId}] Poll error:`, e.message);
+    }
+  }
+  throw new Error("Asset whitelisting timeout (60s)");
+}
+
+// ── Asset Library API ──
+function getUserHash(req) {
+  const key = req.headers["x-api-key"];
+  if (!key) throw new Error("API Key is required");
+  return hashApiKey(key);
+}
+
+// List user's assets
+app.get("/api/assets", (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    res.json({ assets: listAssets(userHash) });
+  } catch (err) {
+    res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
+  }
+});
+
+// Register a new asset
+app.post("/api/assets", (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    const { name, type, storageUrl, thumbUrl } = req.body;
+    if (!storageUrl) return res.status(400).json({ error: "storageUrl required" });
+    const asset = insertAsset({ userHash, name, type, storageUrl, thumbUrl });
+    res.json({ asset });
+  } catch (err) {
+    res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
+  }
+});
+
+// Whitelist a single asset
+app.post("/api/assets/:id/whitelist", async (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    const id = parseInt(req.params.id, 10);
+    const assets = listAssets(userHash);
+    const asset = assets.find((a) => a.id === id);
+    if (!asset) return res.status(404).json({ error: "Asset not found" });
+    if (asset.asset_status === "ready" && asset.asset_id) {
+      return res.json({ asset });
+    }
+    updateAssetStatus(id, userHash, { assetId: null, assetStatus: "pending" });
+    try {
+      const volcId = await serverCreateImageAsset(asset.storage_url, asset.name);
+      const updated = updateAssetStatus(id, userHash, {
+        assetId: "asset://" + volcId, assetStatus: "ready",
+      });
+      console.log(`[Whitelist] Asset ${id} ready: asset://${volcId}`);
+      res.json({ asset: updated });
+    } catch (volcErr) {
+      console.error(`[Whitelist] Asset ${id} failed:`, volcErr.message);
+      const updated = updateAssetStatus(id, userHash, {
+        assetId: null, assetStatus: "failed",
+      });
+      res.json({ asset: updated, error: volcErr.message });
+    }
+  } catch (err) {
+    res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
+  }
+});
+
+// Delete an asset
+app.delete("/api/assets/:id", (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    const id = parseInt(req.params.id, 10);
+    dbDeleteAsset(id, userHash);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
+  }
+});
+
+// Bulk whitelist — for PrivacyInformation auto-retry
+app.post("/api/assets/bulk-whitelist", async (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    const { storageUrls } = req.body;
+    if (!Array.isArray(storageUrls)) return res.status(400).json({ error: "storageUrls array required" });
+    const results = {};
+    for (const url of storageUrls) {
+      const existing = findAssetByUrl(userHash, url);
+      if (existing?.asset_status === "ready" && existing.asset_id) {
+        results[url] = existing.asset_id;
+        continue;
+      }
+      const row = existing || insertAsset({ userHash, name: "", type: "image", storageUrl: url, thumbUrl: url });
+      try {
+        const volcId = await serverCreateImageAsset(url, "");
+        updateAssetStatus(row.id, userHash, { assetId: "asset://" + volcId, assetStatus: "ready" });
+        results[url] = "asset://" + volcId;
+      } catch (e) {
+        console.warn("[BulkWhitelist] Failed for", url, e.message);
+        updateAssetStatus(row.id, userHash, { assetId: null, assetStatus: "failed" });
+        results[url] = null;
+      }
+    }
+    res.json({ results });
+  } catch (err) {
+    res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
+  }
+});
+
+// ── User Preferences API ──
+app.get("/api/prefs", (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    res.json(getPrefs(userHash));
+  } catch (err) {
+    res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
+  }
+});
+
+app.put("/api/prefs", (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    setPrefs(userHash, req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
   }
 });
 

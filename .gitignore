@@ -3,3 +3,4 @@ node_modules
 output/*.mp4
 output/*.mov
 doc.md
+data/

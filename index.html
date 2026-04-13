@@ -119,6 +119,46 @@ a.s:hover{border-color:#999}
 /* @ mention popup */
 .mention-popup{min-width:200px}
 
+/* ── Asset Library Panel (below compose, overlay) ── */
+.compose-wrap{position:relative}
+.compose.asset-open{border-radius:12px 12px 0 0;margin-bottom:0;box-shadow:none}
+.asset-panel{display:none;position:absolute;left:0;right:0;top:100%;z-index:50;border:1px solid #eff0f2;border-top:none;border-radius:0 0 12px 12px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.1)}
+.asset-panel.open{display:block}
+.asset-panel.drag-over{border-color:#3d9be9;background:#f8fbff}
+.asset-panel.drag-over .asset-grid{pointer-events:none}
+.asset-drop-hint{display:none;position:absolute;inset:0;z-index:10;background:rgba(61,155,233,.06);border:2px dashed #3d9be9;border-radius:0 0 12px 12px;align-items:center;justify-content:center;font-size:13px;color:#3d9be9;font-weight:500}
+.asset-panel.drag-over .asset-drop-hint{display:flex}
+.asset-panel-header{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;border-top:1px solid #f0f0f0}
+.asset-panel-title{font-size:13px;font-weight:600;color:#333}
+.asset-panel-actions{display:flex;gap:8px;align-items:center}
+.asset-upload-btn{position:relative;font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid #dde0e4;background:#fff;cursor:pointer;color:#555;transition:all .12s;display:flex;align-items:center;gap:4px;overflow:hidden}
+.asset-upload-btn:hover{background:#f5f6f8;border-color:#c8ccd0}
+.asset-upload-btn input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.asset-panel-hint{font-size:11px;color:#bbb}
+.asset-grid{display:grid;grid-template-columns:repeat(auto-fill,120px);gap:10px;padding:14px 20px;max-height:360px;overflow-y:auto;border-radius:0 0 12px 12px}
+.asset-card{position:relative;width:120px;height:160px;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .15s;border:2px solid transparent;background:#f9fafb;flex-shrink:0}
+.asset-card:hover{border-color:#3d9be9;transform:scale(1.03)}
+.asset-card img,.asset-card video{width:100%;height:100%;object-fit:cover;display:block}
+.asset-card-icon{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f2f4f6;font-size:22px;color:#a0aab4}
+.asset-card-status{position:absolute;top:3px;left:3px;font-size:8px;padding:1px 5px;border-radius:4px;font-weight:600;letter-spacing:.2px}
+.asset-card-status.ready{color:#fff;background:rgba(21,128,61,.85)}
+.asset-card-status.pending{color:#fff;background:rgba(154,103,0,.8)}
+.asset-card-status.failed{color:#fff;background:rgba(220,38,38,.8)}
+.asset-card-status.none{color:#fff;background:rgba(0,0,0,.35)}
+.asset-card-remove{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;border:none;cursor:pointer;font-size:10px;line-height:16px;text-align:center;display:none;padding:0;z-index:2}
+.asset-card:hover .asset-card-remove{display:block}
+.asset-card-remove:hover{background:#e53e3e}
+.asset-card-name{position:absolute;bottom:0;left:0;right:0;padding:2px 4px;font-size:8px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.55));text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.asset-card-wl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.7);opacity:0;transition:opacity .15s}
+.asset-card:hover .asset-card-wl.show{opacity:1}
+.asset-card-wl button{font-size:10px;padding:3px 10px;border-radius:6px;border:1px solid #1a73e8;background:#fff;color:#1a73e8;cursor:pointer}
+.asset-card-wl button:hover{background:#eef4ff}
+.asset-card-progress{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(0,0,0,.1)}
+.asset-card-progress-bar{height:100%;background:#3d9be9;border-radius:0 2px 2px 0;transition:width .2s}
+.asset-card.uploading{pointer-events:none;opacity:.85}
+.asset-card.uploading .asset-card-name{background:linear-gradient(transparent,rgba(0,0,0,.4))}
+.asset-empty{padding:24px 20px;text-align:center;color:#bbb;font-size:12px;grid-column:1/-1}
+
 /* ── Tasks ── */
 .sl{font-size:18px;font-weight:600;color:#1a1a1a}
 .task{padding:0;border:1px solid #eceef2;margin-bottom:10px;border-radius:14px;background:#fff;overflow:hidden;transition:border-color .15s}
@@ -206,6 +246,7 @@ a.s:hover{border-color:#999}
 </details>
 
 <!-- Compose Box -->
+<div class="compose-wrap">
 <div class="compose" id="compose-box">
   <div class="compose-body">
     <!-- All-reference mode -->
@@ -266,7 +307,11 @@ a.s:hover{border-color:#999}
       <input type="hidden" id="i-dur" value="15">
     </div>
     <!-- @ mention -->
-    <div class="pill" id="at-pill" onclick="togglePill('mention-popup',this)">@</div>
+    <div class="pill" id="at-pill" onclick="toggleAssetPanel(this)">
+      <span class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+      Assets
+      <span class="pill-chevron"><svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
     <!-- Send -->
     <button class="send-btn" onclick="generate()" id="gen-btn" title="Generate">
       <span id="cost-label">↑</span>
@@ -298,22 +343,39 @@ a.s:hover{border-color:#999}
   <div class="popup dur-popup" id="dur-popup" style="min-width:180px">
     <div class="popup-title">选择视频生成时长</div>
   </div>
-  <!-- Mention popup -->
+  <!-- Mention popup (for @ in editor) -->
   <div class="popup mention-popup" id="mention-popup" style="min-width:220px" onmousedown="event.preventDefault()">
-    <div class="popup-title">可能@的内容</div>
+    <div class="popup-title">Mentionable media</div>
     <div id="mention-list"></div>
   </div>
 </div>
+<!-- Asset Library Panel (overlay, inside compose-wrap) -->
+<div class="asset-panel" id="asset-panel">
+  <div class="asset-panel-header">
+    <span class="asset-panel-title">Asset Library</span>
+    <div class="asset-panel-actions">
+      <span class="asset-panel-hint">Whitelist to generate real-person videos</span>
+      <label class="asset-upload-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload
+        <input type="file" id="asset-file-input" accept="image/*,video/*,audio/*" multiple onchange="handleAssetUpload(this.files)">
+      </label>
+    </div>
+  </div>
+  <div class="asset-grid" id="asset-grid"></div>
+  <div class="asset-drop-hint">Drop files here to upload</div>
+</div>
+</div><!-- /compose-wrap -->
 
 <!-- Resolution (hidden, keep for API) -->
 <input type="hidden" id="i-res" value="720p">
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 4px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 4px;position:relative;z-index:1">
   <span class="sl" style="margin:0">Tasks</span>
   <span onclick="clearTasks()" style="font-size:12px;color:#ccc;cursor:pointer;transition:color .12s" onmouseover="this.style.color='#888'" onmouseout="this.style.color='#ccc'">Clear All</span>
 </div>
-<div style="font-size:12px;color:#c0c4ca;margin-bottom:10px">Videos expire in 12 hours — please download promptly.</div>
-<div id="tasks"><p class="empty">No tasks yet</p></div>
+<div style="font-size:12px;color:#c0c4ca;margin-bottom:10px;position:relative;z-index:1">Videos expire in 12 hours — please download promptly.</div>
+<div id="tasks" style="position:relative;z-index:1"><p class="empty">No tasks yet</p></div>
 
 <!-- About Modal -->
 <div id="about-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto" onclick="if(event.target===this)toggleAbout()">
@@ -358,9 +420,7 @@ a.s:hover{border-color:#999}
 <script>
 // ── State ──
 const MAX_TASKS = 50;
-const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
-// Purge legacy demo tasks from localStorage
-for (let i = tasks.length - 1; i >= 0; i--) { if (tasks[i].demo) tasks.splice(i, 1); }
+const tasks = [];
 
 // Demo tasks (assets hosted on COS — tutorial/ prefix, excluded from daily cleanup)
 const DEMO_TASKS = {
@@ -430,54 +490,109 @@ function updateCostLabel() {
 }
 const RATIO_SHAPES = {"21:9":[30,13],"16:9":[28,16],"4:3":[24,18],"1:1":[20,20],"3:4":[18,24],"9:16":[16,28]};
 
+// ── Prefs sync (server-side, keyed by API Key) ──
+let _prefsTimer = null;
+function syncPrefs() {
+  clearTimeout(_prefsTimer);
+  _prefsTimer = setTimeout(() => {
+    const key = document.getElementById("i-key").value.trim();
+    if (!key) return;
+    const prefs = {
+      apiBase: document.getElementById("i-base").value,
+      model: document.getElementById("i-model").value,
+      ratio: document.getElementById("i-ratio").value,
+      dur: document.getElementById("i-dur").value,
+      res: document.getElementById("i-res").value,
+      webSearch: document.getElementById("i-search")?.checked || false,
+      watermark: document.getElementById("i-wm")?.checked || false,
+      prompt: getPromptText(),
+      tasks: tasks.filter(t => t.id).slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, apiCreatedAt:t.apiCreatedAt, apiUpdatedAt:t.apiUpdatedAt, videoUrl:t.videoUrl, response:t.response, input:t.input })),
+    };
+    fetch("/api/prefs", { method: "PUT", headers: { "X-Api-Key": key, "Content-Type": "application/json" }, body: JSON.stringify(prefs) }).catch(() => {});
+  }, 800);
+}
+
+function applyPrefs(p) {
+  if (p.apiBase != null) document.getElementById("i-base").value = p.apiBase;
+  if (p.model) {
+    document.getElementById("i-model").value = p.model;
+    document.getElementById("model-label").textContent = p.model === "seedance-fast" ? "Seedance Fast" : "Seedance";
+    document.getElementById("chk-seedance").style.display = p.model === "seedance" ? "" : "none";
+    document.getElementById("chk-seedance-fast").style.display = p.model === "seedance-fast" ? "" : "none";
+  }
+  if (p.res) {
+    document.getElementById("i-res").value = p.res;
+    document.getElementById("res-label").textContent = p.res;
+    document.querySelectorAll("#res-popup .popup-item").forEach(item => {
+      item.classList.toggle("selected", item.dataset.value === p.res);
+      const chk = item.querySelector(".check");
+      if (chk) chk.style.display = item.dataset.value === p.res ? "" : "none";
+    });
+  }
+  if (p.ratio) { document.getElementById("i-ratio").value = p.ratio; document.getElementById("ratio-label").textContent = p.ratio; }
+  if (p.dur) { document.getElementById("i-dur").value = p.dur; document.getElementById("dur-label").textContent = p.dur + "s"; }
+  if (p.webSearch != null) { const el = document.getElementById("i-search"); if (el) el.checked = p.webSearch; }
+  if (p.watermark != null) { const el = document.getElementById("i-wm"); if (el) el.checked = p.watermark; }
+  if (p.prompt) setPromptText(p.prompt);
+  if (Array.isArray(p.tasks) && p.tasks.length) {
+    tasks.length = 0;
+    // Rescue: if a task was marked failed but has a videoUrl, restore to completed
+    for (const t of p.tasks) {
+      if (t.status === "failed" && t.videoUrl) { t.status = "completed"; }
+      tasks.push(t);
+    }
+    renderTasks();
+  }
+}
+
+async function loadPrefs() {
+  const key = document.getElementById("i-key").value.trim();
+  if (!key) return;
+  try {
+    const resp = await fetch("/api/prefs", { headers: { "X-Api-Key": key } });
+    if (resp.ok) { const p = await resp.json(); if (p && Object.keys(p).length) applyPrefs(p); }
+  } catch (e) { console.warn("[Prefs] Load failed:", e.message); }
+}
+
 // ── Init ──
 (function init() {
-  const fields = {"i-key":"apiKey","i-base":"apiBase","i-model":"model","i-ratio":"ratio","i-dur":"dur","i-res":"res"};
+  // Only API key stays in localStorage
+  const savedKey = localStorage.getItem("apiKey");
+  if (savedKey) document.getElementById("i-key").value = savedKey;
+  document.getElementById("i-key").addEventListener("input", () => {
+    localStorage.setItem("apiKey", document.getElementById("i-key").value);
+    loadPrefs(); // reload prefs for new key
+  });
+
+  // Apply defaults then load server prefs
+  const fields = {"i-base":"apiBase","i-model":"model","i-ratio":"ratio","i-dur":"dur","i-res":"res"};
   const checks = {"i-search":"webSearch","i-wm":"watermark"};
-  for (const [id,key] of Object.entries(fields)) {
+  for (const [id] of Object.entries(fields)) {
     const el = document.getElementById(id);
-    if (!el) continue;
-    const v = localStorage.getItem(key);
-    if (v !== null) el.value = v;
-    el.addEventListener("input", () => localStorage.setItem(key, el.value));
+    if (el) el.addEventListener("input", syncPrefs);
   }
-  for (const [id,key] of Object.entries(checks)) {
+  for (const [id] of Object.entries(checks)) {
     const el = document.getElementById(id);
-    if (!el) continue;
-    const v = localStorage.getItem(key);
-    if (v !== null) el.checked = v === "true";
-    el.addEventListener("change", () => localStorage.setItem(key, el.checked));
+    if (el) el.addEventListener("change", syncPrefs);
   }
-  // Restore prompt
-  const savedPrompt = localStorage.getItem("prompt");
-  if (savedPrompt) setPromptText(savedPrompt);
-  // Restore model label
+
+  // Restore model label from current value
   const m = document.getElementById("i-model").value;
   document.getElementById("model-label").textContent = m === "seedance-fast" ? "Seedance Fast" : "Seedance";
   document.getElementById("chk-seedance").style.display = m === "seedance" ? "" : "none";
   document.getElementById("chk-seedance-fast").style.display = m === "seedance-fast" ? "" : "none";
-
-  // Restore resolution label
   const res = document.getElementById("i-res").value || "720p";
   document.getElementById("res-label").textContent = res;
-  document.querySelectorAll("#res-popup .popup-item").forEach(item => {
-    item.classList.toggle("selected", item.dataset.value === res);
-    const chk = item.querySelector(".check");
-    if (chk) chk.style.display = item.dataset.value === res ? "" : "none";
-  });
-
-  // Restore ratio label
   const r = document.getElementById("i-ratio").value || "1:1";
   document.getElementById("ratio-label").textContent = r;
-
-  // Restore duration label
   const d = document.getElementById("i-dur").value || "15";
   document.getElementById("dur-label").textContent = d + "s";
 
-  // Build ratio grid
   buildRatioGrid();
-  // Build duration list
   buildDurList();
+
+  // Load server-side prefs after a tick (key must be set)
+  if (savedKey) setTimeout(loadPrefs, 100);
 
   // Setup prompt editor events
   const ta = document.getElementById("i-prompt");
@@ -541,7 +656,11 @@ let openPill = null;
 
 function closeAllPopups() {
   document.querySelectorAll(".popup.open").forEach(p => p.classList.remove("open"));
-  document.querySelectorAll(".pill.active").forEach(p => p.classList.remove("active"));
+  const assetOpen = document.getElementById("asset-panel").classList.contains("open");
+  document.querySelectorAll(".pill.active").forEach(p => {
+    if (assetOpen && p.id === "at-pill") return;
+    p.classList.remove("active");
+  });
   openPopup = null;
   openPill = null;
 }
@@ -601,7 +720,7 @@ document.addEventListener("click", (e) => {
 function selectModel(el) {
   const v = el.dataset.value;
   document.getElementById("i-model").value = v;
-  localStorage.setItem("model", v);
+  syncPrefs();
   document.getElementById("model-label").textContent = v === "seedance-fast" ? "Seedance Fast" : "Seedance";
   document.getElementById("chk-seedance").style.display = v === "seedance" ? "" : "none";
   document.getElementById("chk-seedance-fast").style.display = v === "seedance-fast" ? "" : "none";
@@ -631,13 +750,14 @@ function syncRefMode() {
     ? "Describe the action or smooth transition between these two frames."
     : "Upload 1-12 assets and enter your prompt. Mix images, video, and audio. Example: @Image1 mimics the motion of @Video1, with voice from @Audio1.");
   document.getElementById("at-pill").style.display = isKf ? "none" : "";
+  if (isKf) { document.getElementById("asset-panel").classList.remove("open"); document.getElementById("compose-box").classList.remove("asset-open"); }
   renderTasks();
 }
 
 function selectRes(el) {
   const v = el.dataset.value;
   document.getElementById("i-res").value = v;
-  localStorage.setItem("res", v);
+  syncPrefs();
   document.getElementById("res-label").textContent = v;
   document.querySelectorAll("#res-popup .popup-item").forEach(item => {
     item.classList.toggle("selected", item.dataset.value === v);
@@ -649,7 +769,7 @@ function selectRes(el) {
 
 function selectRatio(r) {
   document.getElementById("i-ratio").value = r;
-  localStorage.setItem("ratio", r);
+  syncPrefs();
   document.getElementById("ratio-label").textContent = r;
   buildRatioGrid();
   closeAllPopups();
@@ -657,7 +777,7 @@ function selectRatio(r) {
 
 function selectDur(d) {
   document.getElementById("i-dur").value = d;
-  localStorage.setItem("dur", String(d));
+  syncPrefs();
   document.getElementById("dur-label").textContent = d + "s";
   buildDurList();
   closeAllPopups();
@@ -667,7 +787,7 @@ function selectDur(d) {
 function buildMentionList() {
   const el = document.getElementById("mention-list");
   if (mediaItems.length === 0) {
-    el.innerHTML = '<div style="padding:10px 16px;color:#aaa;font-size:12px">No media added</div>';
+    el.innerHTML = '';
     return;
   }
   mentionIdx = 0;
@@ -866,7 +986,7 @@ document.addEventListener("selectionchange", () => {
 });
 
 function savePromptToStorage() {
-  localStorage.setItem("prompt", getPromptText());
+  syncPrefs();
 }
 
 function onPromptInput() {
@@ -994,14 +1114,45 @@ function addMedia(type) {
 
 function removeMediaItem(id) {
   const idx = mediaItems.findIndex(m => m.id === id);
-  if (idx >= 0) {
-    const item = mediaItems[idx];
-    if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(item.thumbUrl);
-    }
-    mediaItems.splice(idx, 1);
+  if (idx < 0) { renderStack(); return; }
+  const item = mediaItems[idx];
+  let typeIdx = 0;
+  for (let i = 0; i <= idx; i++) {
+    if (mediaItems[i].type === item.type) typeIdx++;
   }
+  if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(item.thumbUrl);
+  }
+  mediaItems.splice(idx, 1);
+  updateMentionsAfterRemove(item.type, typeIdx);
   renderStack();
+}
+
+function updateMentionsAfterRemove(removedType, removedIdx) {
+  const typeLabel = { image: "Image", video: "Video", audio: "Audio" }[removedType];
+  if (!typeLabel) return;
+  const editor = document.getElementById("i-prompt");
+  const mentions = [...editor.querySelectorAll(`.mention[data-type="${removedType}"]`)];
+  for (const span of mentions) {
+    const text = span.getAttribute("data-text") || span.textContent;
+    const m = text.match(/^@(Image|Video|Audio)(\d+)$/);
+    if (!m) continue;
+    const n = parseInt(m[2], 10);
+    if (n === removedIdx) {
+      const next = span.nextSibling;
+      if (next && next.nodeType === Node.TEXT_NODE && /^[\u00A0 ]/.test(next.textContent)) {
+        next.textContent = next.textContent.slice(1);
+      }
+      span.remove();
+    } else if (n > removedIdx) {
+      const newLabel = typeLabel + (n - 1);
+      const newText = "@" + newLabel;
+      span.setAttribute("data-text", newText);
+      const textNode = [...span.childNodes].reverse().find(c => c.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.textContent = newText;
+    }
+  }
+  savePromptToStorage();
 }
 
 function renderStack() {
@@ -1130,8 +1281,9 @@ async function handleFileForItem(id, file) {
     item.assetUrl = ""; // Clear stale asset — new file needs fresh asset if needed
     console.log(`[Upload] ${item.type} uploaded to COS:`, fileUrl);
     renderStack();
+    registerAssetOnUpload(item);
   } catch (err) {
-    alert("上传失败：" + (err.message || "请重试"));
+    alert("Upload failed: " + (err.message || "Please retry"));
     removeMediaItem(id);
   } finally {
     pendingUploads--;
@@ -1199,8 +1351,9 @@ async function uploadKfFile(which, file) {
     if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
     obj.url = presign.fileUrl;
     obj.cosUrl = presign.fileUrl;
+    registerAssetOnUpload({ name: file.name, type: "image", cosUrl: presign.fileUrl, url: presign.fileUrl, thumbUrl: presign.fileUrl });
   } catch (err) {
-    alert("上传失败：" + (err.message || "请重试"));
+    alert("Upload failed: " + (err.message || "Please retry"));
     if (which === "first") kfFirst = null; else kfLast = null;
     renderKfCard(which);
   }
@@ -1324,35 +1477,31 @@ async function runSubmit(task, body) {
         lastErr = errMsg || JSON.stringify(data);
         const rawJson = JSON.stringify(data);
         console.warn(`[Generate] Attempt ${attempt} failed:`, lastErr);
-        // PrivacyInformation → create assets, update task status, retry
+        // PrivacyInformation → server-side bulk whitelist, then retry
         if ((lastErr.includes("PrivacyInformation") || rawJson.includes("PrivacyInformation")) && attempt < 3) {
-          console.log("[Generate] PrivacyInformation detected, creating assets...");
+          console.log("[Generate] PrivacyInformation detected, bulk whitelisting...");
           task.status = "whitelisting";
           task.whitelistStart = Date.now();
           renderTasks();
-          // Create assets sequentially (API rate-limited)
-          const assetMap = new Map();
-          const imageUrls = currentBody.content.filter(c => c.type === "image_url").map(c => c.image_url.url);
-          for (const url of imageUrls) {
-            if (url.startsWith("asset://")) continue;
+          const imageUrls = currentBody.content.filter(c => c.type === "image_url").map(c => c.image_url.url).filter(u => !u.startsWith("asset://"));
+          if (imageUrls.length > 0) {
             try {
-              const id = await createImageAsset(url, "");
-              assetMap.set(url, "asset://" + id);
-            } catch (err) { console.warn("[Generate] Asset creation failed for", url, err); }
+              const resp = await fetch("/api/assets/bulk-whitelist", {
+                method: "POST", headers: assetHeaders(),
+                body: JSON.stringify({ storageUrls: imageUrls }),
+              });
+              const { results } = await resp.json();
+              for (const [cosUrl, assetUrl] of Object.entries(results || {})) {
+                if (!assetUrl) continue;
+                const item = mediaItems.find(m => (m.cosUrl || m.url) === cosUrl);
+                if (item) item.assetUrl = assetUrl;
+                if (kfFirst && (kfFirst.cosUrl || kfFirst.url) === cosUrl) kfFirst.assetUrl = assetUrl;
+                if (kfLast && (kfLast.cosUrl || kfLast.url) === cosUrl) kfLast.assetUrl = assetUrl;
+              }
+            } catch (e) { console.warn("[Generate] Bulk whitelist failed:", e.message); }
           }
-          // Save asset URLs on global items for reuse in future requests
-          for (const [cosUrl, assetUrl] of assetMap) {
-            const item = mediaItems.find(m => (m.cosUrl || m.url) === cosUrl);
-            if (item) item.assetUrl = assetUrl;
-            if (kfFirst && (kfFirst.cosUrl || kfFirst.url) === cosUrl) kfFirst.assetUrl = assetUrl;
-            if (kfLast && (kfLast.cosUrl || kfLast.url) === cosUrl) kfLast.assetUrl = assetUrl;
-          }
-          // Rebuild body with asset URLs, preserve original prompt
           currentBody = buildRequest();
-          const hasText = currentBody.content.some(c => c.type === "text");
-          const origText = body.content.find(c => c.type === "text");
-          if (!hasText && origText) currentBody.content.unshift(origText);
-          console.log("[Generate] Retrying with asset URLs...");
+          console.log("[Generate] Retry body:", JSON.stringify(currentBody, null, 2));
           continue;
         }
         if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
@@ -1385,8 +1534,7 @@ async function runSubmit(task, body) {
 
 // ── Task management ──
 function saveTasks() {
-  const slim = tasks.filter(t => t.id).slice(0, MAX_TASKS).map(t => ({ id:t.id, status:t.status, progress:t.progress, created:t.created, apiCreatedAt:t.apiCreatedAt, apiUpdatedAt:t.apiUpdatedAt, videoUrl:t.videoUrl, response:t.response, input:t.input }));
-  localStorage.setItem("tasks", JSON.stringify(slim));
+  syncPrefs();
 }
 
 function startPolling() { if (pollTimer) return; pollTimer = setInterval(pollAll, 15000); }
@@ -1410,19 +1558,28 @@ async function pollAll() {
         if (parsed.updatedAt) task.apiUpdatedAt = parsed.updatedAt;
         task.pollErrors = 0;
       } else {
+        // If we already have a videoUrl, the generation succeeded
+        if (task.videoUrl) {
+          task.status = "completed"; task.endTime = Date.now(); changed = true;
+        } else {
+          task.pollErrors = (task.pollErrors||0)+1;
+          if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
+        }
+      }
+    } catch(e) {
+      if (task.videoUrl) {
+        task.status = "completed"; task.endTime = Date.now(); changed = true;
+      } else {
         task.pollErrors = (task.pollErrors||0)+1;
         if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
       }
-    } catch(e) {
-      task.pollErrors = (task.pollErrors||0)+1;
-      if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
     }
   }
   saveTasks();
   if (changed) renderTasks();
 }
 
-const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"failed","CANCELLED":"cancelled","running":"running","completed":"completed","failed":"failed","cancelled":"cancelled","submitted":"submitted"};
+const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"failed","CANCELLED":"cancelled","running":"running","completed":"completed","failed":"failed","cancelled":"cancelled","submitted":"submitted","success":"completed","succeeded":"completed","done":"completed"};
 
 function parseResponse(raw) {
   const wrap = raw.data||raw; const inner = wrap.data||wrap;
@@ -1494,7 +1651,6 @@ function restoreInput(taskId) {
 
   // Model
   document.getElementById("i-model").value = inp.model || "seedance";
-  localStorage.setItem("model", inp.model || "seedance");
   document.getElementById("model-label").textContent = inp.model === "seedance-fast" ? "Seedance Fast" : "Seedance";
   document.getElementById("chk-seedance").style.display = inp.model === "seedance" ? "" : "none";
   document.getElementById("chk-seedance-fast").style.display = inp.model === "seedance-fast" ? "" : "none";
@@ -1515,9 +1671,10 @@ function restoreInput(taskId) {
 
   // Checkboxes
   const se = document.getElementById("i-search");
-  if (se) { se.checked = inp.webSearch || false; localStorage.setItem("webSearch", se.checked); }
+  if (se) { se.checked = inp.webSearch || false; }
   const wm = document.getElementById("i-wm");
-  if (wm) { wm.checked = inp.watermark || false; localStorage.setItem("watermark", wm.checked); }
+  if (wm) { wm.checked = inp.watermark || false; }
+  syncPrefs();
 
   // Clear existing media
   for (const m of mediaItems) {
@@ -1636,95 +1793,241 @@ function escJs(s){return (s==null?"":String(s)).replace(/\\/g,"\\\\").replace(/'
 
 setInterval(()=>{document.querySelectorAll("[data-elapsed]").forEach(el=>{const key=el.dataset.elapsed;const task=tasks.find(t=>(t.id||("_"+t.created))===key);if(task&&!TERMINAL_STATES.includes(task.status))el.textContent=elapsed(task)})},1000);
 
-// ── Auto Asset Creation ──
-let cachedGroupId = null;
-let cachedGroupCount = 0;
-let groupLockPromise = null; // Prevent concurrent group lookups
+// ── Asset Library (Panel) ──
+let assetLibrary = [];
+let _assetLoading = false;
 
-const ASSET_BASE = "https://www.anyfast.ai";
-
-async function assetCall(action, body) {
-  const key = document.getElementById("i-key").value.trim();
-  const base = document.getElementById("i-base").value.trim() || ASSET_BASE;
-  if (!key) throw new Error("API Key required for asset creation");
-  const url = `${base}/volc/asset/${action}`;
-  console.log(`[Asset API] POST ${url}`);
-  const payload = { model: "volc-asset", ...body };
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const text = await resp.text();
-  console.log(`[Asset API] ${action} status=${resp.status}:`, text.slice(0, 200));
-  let data;
-  try { data = JSON.parse(text); } catch (e) {
-    throw new Error(`Asset API returned non-JSON (status ${resp.status}): ${text.slice(0, 100)}`);
-  }
-  if (data.ResponseMetadata?.Error) throw new Error(data.ResponseMetadata.Error.Message || "Asset API error");
-  if (data.error) throw new Error(data.error.message || data.error);
-  return data.Result || data;
+function assetHeaders() {
+  return { "X-Api-Key": document.getElementById("i-key").value.trim(), "Content-Type": "application/json" };
 }
 
-async function ensureAssetGroup() {
-  // Use cached group if available and has space
-  if (cachedGroupId && cachedGroupCount < 64) return cachedGroupId;
-
-  // Lock: if another call is already finding/creating a group, wait for it
-  if (groupLockPromise) {
-    await groupLockPromise;
-    if (cachedGroupId && cachedGroupCount < 64) return cachedGroupId;
+function toggleAssetPanel(pillEl) {
+  const panel = document.getElementById("asset-panel");
+  const compose = document.getElementById("compose-box");
+  const isOpen = panel.classList.contains("open");
+  if (isOpen) {
+    panel.classList.remove("open");
+    compose.classList.remove("asset-open");
+    if (pillEl) pillEl.classList.remove("active");
+  } else {
+    panel.classList.add("open");
+    compose.classList.add("asset-open");
+    if (pillEl) pillEl.classList.add("active");
+    loadAssetLibrary();
   }
+}
 
-  let resolve;
-  groupLockPromise = new Promise(r => { resolve = r; });
-
+async function loadAssetLibrary() {
+  const key = document.getElementById("i-key").value.trim();
+  if (!key) { renderAssetGrid(); return; }
+  if (_assetLoading) return;
+  _assetLoading = true;
   try {
-    const list = await assetCall("ListAssetGroups", {
-      Filter: {}, PageNumber: 1, PageSize: 100
-    });
-    const groups = (list.Items || []).filter(g => !g.Name?.startsWith("__del__"));
-    console.log("[Asset] Found groups:", groups.length);
+    const resp = await fetch("/api/assets", { headers: assetHeaders() });
+    if (resp.ok) {
+      const data = await resp.json();
+      assetLibrary = data.assets || [];
+    }
+  } catch (e) {
+    console.warn("[AssetLib] Load failed:", e.message);
+  } finally {
+    _assetLoading = false;
+    renderAssetGrid();
+  }
+}
 
-    for (const g of groups) {
-      const assets = await assetCall("ListAssets", {
-        Filter: { GroupIds: [g.Id], GroupType: "AIGC" }, PageNumber: 1, PageSize: 1
+function renderAssetGrid() {
+  const el = document.getElementById("asset-grid");
+  if (!el) return;
+  if (assetLibrary.length === 0) {
+    el.innerHTML = '<div class="asset-empty">Click Upload to add assets<br>Asset library is independent from input</div>';
+    return;
+  }
+  const statusLabel = { ready: "Ready", pending: "Pending...", failed: "Failed", none: "Not whitelisted", uploading: "Uploading..." };
+  el.innerHTML = assetLibrary.map(a => {
+    const isUploading = a.asset_status === "uploading";
+    const thumb = a.type === "audio"
+      ? `<div class="asset-card-icon">🎵</div>`
+      : a.type === "video"
+        ? `<video src="${esc(a.thumb_url || a.storage_url)}" muted preload="metadata"></video>`
+        : `<img src="${esc(a.thumb_url || a.storage_url)}">`;
+    const canWl = !isUploading && (a.asset_status === "none" || a.asset_status === "failed");
+    const wlOverlay = canWl
+      ? `<div class="asset-card-wl show"><button onclick="event.stopPropagation();whitelistAsset(${a.id})">Whitelist</button></div>` : '';
+    const progressBar = isUploading
+      ? `<div class="asset-card-progress"><div class="asset-card-progress-bar" id="prog-${a.id}" style="width:${a._progress || 0}%"></div></div>` : '';
+    const clickAttr = isUploading ? '' : `onclick="insertSavedAsset(${a.id})"`;
+    const removeBtn = isUploading ? '' : `<button class="asset-card-remove" onclick="event.stopPropagation();deleteLibraryAsset(${a.id})">✕</button>`;
+    return `<div class="asset-card${isUploading ? ' uploading' : ''}" ${clickAttr} title="${esc(a.name || 'Asset')}">
+      ${thumb}
+      <span class="asset-card-status ${a.asset_status}">${statusLabel[a.asset_status]}</span>
+      ${removeBtn}
+      <div class="asset-card-name">${esc(a.name || "Asset")}</div>
+      ${wlOverlay}
+      ${progressBar}
+    </div>`;
+  }).join("");
+}
+
+async function handleAssetUpload(files) {
+  if (!files || !files.length) return;
+  const key = document.getElementById("i-key").value.trim();
+  if (!key) { alert("Please set your API Key first"); return; }
+  const fileList = Array.from(files);
+  setTimeout(() => { const el = document.getElementById("asset-file-input"); if (el) el.value = ""; }, 0);
+  for (const file of fileList) {
+    const type = file.type.startsWith("video") ? "video" : file.type.startsWith("audio") ? "audio" : "image";
+    const placeholderId = "_up_" + Date.now() + Math.random().toString(36).slice(2, 6);
+    const localUrl = URL.createObjectURL(file);
+    const placeholder = { id: placeholderId, name: file.name, type, storage_url: "", thumb_url: localUrl, asset_status: "uploading", _progress: 0 };
+    assetLibrary.unshift(placeholder);
+    renderAssetGrid();
+    try {
+      const presignResp = await fetch("/api/cos/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type, prefix: "assets" }),
       });
-      const count = assets.TotalCount || 0;
-      console.log(`[Asset] Group ${g.Id} (${g.Name}): ${count}/64 assets`);
-      if (count < 64) {
-        cachedGroupId = g.Id;
-        cachedGroupCount = count;
-        return g.Id;
+      if (!presignResp.ok) throw new Error("Failed to get upload URL");
+      const presign = await presignResp.json();
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", presign.uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round(e.loaded / e.total * 100);
+            const bar = document.getElementById("prog-" + placeholderId);
+            if (bar) bar.style.width = pct + "%";
+            placeholder._progress = pct;
+          }
+        };
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Upload failed: " + xhr.status));
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.send(file);
+      });
+      const regResp = await fetch("/api/assets", {
+        method: "POST", headers: assetHeaders(),
+        body: JSON.stringify({ name: file.name, type, storageUrl: presign.fileUrl, thumbUrl: presign.fileUrl }),
+      });
+      const idx = assetLibrary.findIndex(a => a.id === placeholderId);
+      if (regResp.ok) {
+        const data = await regResp.json();
+        if (data.asset && idx >= 0) assetLibrary[idx] = data.asset;
+        else if (data.asset) assetLibrary.unshift(data.asset);
+      }
+      if (idx >= 0 && assetLibrary[idx].id === placeholderId) assetLibrary.splice(idx, 1);
+    } catch (e) {
+      console.warn("[AssetLib] Upload failed:", file.name, e.message);
+      const idx = assetLibrary.findIndex(a => a.id === placeholderId);
+      if (idx >= 0) assetLibrary.splice(idx, 1);
+      alert("Upload failed: " + file.name + " — " + e.message);
+    } finally {
+      URL.revokeObjectURL(localUrl);
+    }
+    renderAssetGrid();
+  }
+}
+
+// ── Asset panel drag & drop ──
+(function() {
+  const panel = document.getElementById("asset-panel");
+  let dragCounter = 0;
+  panel.addEventListener("dragenter", (e) => { e.preventDefault(); dragCounter++; panel.classList.add("drag-over"); });
+  panel.addEventListener("dragleave", (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; panel.classList.remove("drag-over"); } });
+  panel.addEventListener("dragover", (e) => e.preventDefault());
+  panel.addEventListener("drop", (e) => {
+    e.preventDefault(); dragCounter = 0; panel.classList.remove("drag-over");
+    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/"));
+    if (files.length) handleAssetUpload(files);
+  });
+})();
+
+async function whitelistAsset(id) {
+  const a = assetLibrary.find(x => x.id === id);
+  if (!a) return;
+  a.asset_status = "pending";
+  renderAssetGrid();
+  try {
+    const resp = await fetch(`/api/assets/${id}/whitelist`, { method: "POST", headers: assetHeaders() });
+    const data = await resp.json();
+    if (data.asset) {
+      const idx = assetLibrary.findIndex(x => x.id === id);
+      if (idx >= 0) assetLibrary[idx] = data.asset;
+      // Also update mediaItems if matched
+      const item = mediaItems.find(m => (m.cosUrl || m.url) === data.asset.storage_url);
+      if (item && data.asset.asset_id) item.assetUrl = data.asset.asset_id;
+    }
+  } catch (e) {
+    console.warn("[AssetLib] Whitelist failed:", e.message);
+    a.asset_status = "failed";
+  }
+  renderAssetGrid();
+}
+
+async function deleteLibraryAsset(id) {
+  try {
+    await fetch(`/api/assets/${id}`, { method: "DELETE", headers: assetHeaders() });
+    assetLibrary = assetLibrary.filter(a => a.id !== id);
+    renderAssetGrid();
+  } catch (e) { console.warn("[AssetLib] Delete failed:", e.message); }
+}
+
+function insertSavedAsset(id) {
+  const a = assetLibrary.find(x => x.id === id);
+  if (!a) return;
+  // Check if already in mediaItems
+  let existing = mediaItems.find(m => (m.cosUrl || m.url) === a.storage_url);
+  if (!existing) {
+    const newItem = {
+      id: Date.now(),
+      type: a.type || "image",
+      url: a.storage_url,
+      file: null,
+      thumbUrl: a.thumb_url || a.storage_url,
+      name: a.name || "Asset",
+      cosUrl: a.storage_url,
+      assetUrl: a.asset_id || null,
+    };
+    mediaItems.push(newItem);
+    renderStack();
+    existing = newItem;
+  }
+  const typeLabel = existing.type === "image" ? "Image" : existing.type === "video" ? "Video" : "Audio";
+  let count = 0;
+  for (const m of mediaItems) {
+    if (m.type === existing.type) count++;
+    if (m === existing) break;
+  }
+  insertMention(typeLabel + count);
+}
+
+async function registerAssetOnUpload(item) {
+  const key = document.getElementById("i-key").value.trim();
+  if (!key) return;
+  try {
+    const resp = await fetch("/api/assets", {
+      method: "POST",
+      headers: assetHeaders(),
+      body: JSON.stringify({
+        name: item.name || "",
+        type: item.type || "image",
+        storageUrl: item.cosUrl || item.url,
+        thumbUrl: item.thumbUrl || item.cosUrl || item.url,
+      }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.asset) {
+        if (data.asset.asset_id && data.asset.asset_status === "ready") {
+          item.assetUrl = data.asset.asset_id;
+        }
+        const idx = assetLibrary.findIndex(a => a.id === data.asset.id);
+        if (idx >= 0) assetLibrary[idx] = data.asset;
+        else assetLibrary.unshift(data.asset);
       }
     }
-
-    console.log("[Asset] No group with space, creating new one...");
-    const name = "auto-assets-" + Date.now();
-    const created = await assetCall("CreateAssetGroup", { Name: name, GroupType: "AIGC" });
-    cachedGroupId = created.Id;
-    cachedGroupCount = 0;
-    return created.Id;
-  } finally {
-    groupLockPromise = null;
-    resolve();
-  }
-}
-
-// Queue asset creation to avoid race conditions
-let assetQueue = Promise.resolve();
-
-async function createImageAsset(cosUrl, name) {
-  // Chain asset creations sequentially to avoid concurrent group issues
-  const result = await (assetQueue = assetQueue.then(async () => {
-    const groupId = await ensureAssetGroup();
-    const res = await assetCall("CreateAsset", {
-      GroupId: groupId, URL: cosUrl, AssetType: "Image", Name: (name || "image").slice(0, 60)
-    });
-    cachedGroupCount++;
-    return res;
-  }));
-  return result.Id;
+  } catch (e) { console.warn("[AssetLib] Register failed:", e.message); }
 }
 
 function toggleAbout() {

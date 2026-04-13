@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "@volcengine/openapi": "^1.36.0",
+    "better-sqlite3": "^12.8.0",
     "cos-nodejs-sdk-v5": "^2.15.4",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
