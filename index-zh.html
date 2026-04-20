@@ -1640,11 +1640,15 @@ const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"fail
 
 function parseResponse(raw) {
   const wrap = raw.data||raw; const inner = wrap.data||wrap;
-  // Check all status levels; prefer top-level raw.status (e.g. "SUCCESS") for terminal states
+  const videoUrl = findVideoUrl(raw);
+  // If there's a video URL, the task completed regardless of status field
+  if (videoUrl) {
+    return { id: inner.id||wrap.task_id||raw.id, status: "completed", progress: null, videoUrl, createdAt: inner.created_at||wrap.created_at||0, updatedAt: inner.updated_at||wrap.updated_at||0 };
+  }
   const rawStatus = raw.status||inner.status||wrap.status||"submitted";
   const status = STATUS_MAP[rawStatus] || STATUS_MAP[inner.status||wrap.status||"submitted"] || (wrap.status||"submitted").toLowerCase();
   const progress = (status === "completed" || status === "failed" || status === "cancelled") ? null : (wrap.progress||raw.progress||null);
-  return { id: inner.id||wrap.task_id||raw.id, status, progress, videoUrl: findVideoUrl(raw), createdAt: inner.created_at||wrap.created_at||0, updatedAt: inner.updated_at||wrap.updated_at||0 };
+  return { id: inner.id||wrap.task_id||raw.id, status, progress, videoUrl: null, createdAt: inner.created_at||wrap.created_at||0, updatedAt: inner.updated_at||wrap.updated_at||0 };
 }
 
 function findVideoUrl(d) {
