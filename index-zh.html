@@ -1640,7 +1640,11 @@ const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"fail
 
 function parseResponse(raw) {
   const wrap = raw.data||raw; const inner = wrap.data||wrap;
-  return { id: inner.id||wrap.task_id||raw.id, status: STATUS_MAP[inner.status||wrap.status||raw.status||"submitted"]||(wrap.status||"submitted").toLowerCase(), progress: wrap.progress||null, videoUrl: findVideoUrl(raw), createdAt: inner.created_at||wrap.created_at||0, updatedAt: inner.updated_at||wrap.updated_at||0 };
+  // Check all status levels; prefer top-level raw.status (e.g. "SUCCESS") for terminal states
+  const rawStatus = raw.status||inner.status||wrap.status||"submitted";
+  const status = STATUS_MAP[rawStatus] || STATUS_MAP[inner.status||wrap.status||"submitted"] || (wrap.status||"submitted").toLowerCase();
+  const progress = (status === "completed" || status === "failed" || status === "cancelled") ? null : (wrap.progress||raw.progress||null);
+  return { id: inner.id||wrap.task_id||raw.id, status, progress, videoUrl: findVideoUrl(raw), createdAt: inner.created_at||wrap.created_at||0, updatedAt: inner.updated_at||wrap.updated_at||0 };
 }
 
 function findVideoUrl(d) {
