@@ -1605,8 +1605,10 @@ async function runSubmit(task, body) {
                 body: JSON.stringify({ storageUrls, items }),
               });
               const { results, errors: wlErrors } = await resp.json();
+              const urlMap = {};
               for (const [cosUrl, assetUrl] of Object.entries(results || {})) {
                 if (!assetUrl) continue;
+                urlMap[cosUrl] = assetUrl;
                 const item = mediaItems.find(m => (m.cosUrl || m.url) === cosUrl);
                 if (item) item.assetUrl = assetUrl;
                 if (kfFirst && (kfFirst.cosUrl || kfFirst.url) === cosUrl) kfFirst.assetUrl = assetUrl;
@@ -1617,10 +1619,23 @@ async function runSubmit(task, body) {
                 const isQuota = firstErr.includes("额度不足") || firstErr.includes("quota") || firstErr.includes("insufficient") || firstErr.includes("balance");
                 showToast({ type: "warn", title: isQuota ? "账户余额不足" : "素材加白失败", desc: isQuota ? "请前往 AnyFast 充值后重试" : firstErr, duration: 5000 });
               }
+              // Retry with the ORIGINAL body — only swap cos URLs to asset:// URLs in content.
+              // Never rebuild from current UI: user may have changed duration/ratio/mediaItems meanwhile.
+              const swapUrl = (c, key) => urlMap[c[key].url]
+                ? { ...c, [key]: { ...c[key], url: urlMap[c[key].url] } }
+                : c;
+              currentBody = {
+                ...currentBody,
+                content: currentBody.content.map(c => {
+                  if (c.type === "image_url") return swapUrl(c, "image_url");
+                  if (c.type === "video_url") return swapUrl(c, "video_url");
+                  if (c.type === "audio_url") return swapUrl(c, "audio_url");
+                  return c;
+                }),
+              };
               loadAssetLibrary();
             } catch (e) { console.warn("[Generate] Bulk whitelist failed:", e.message); }
           }
-          currentBody = buildRequest();
           console.log("[Generate] Retry body:", JSON.stringify(currentBody, null, 2));
           continue;
         }

@@ -1549,17 +1549,28 @@ async function runSubmit(task, body) {
                 body: JSON.stringify({ storageUrls: imageUrls, items }),
               });
               const { results } = await resp.json();
+              const urlMap = {};
               for (const [cosUrl, assetUrl] of Object.entries(results || {})) {
                 if (!assetUrl) continue;
+                urlMap[cosUrl] = assetUrl;
                 const item = mediaItems.find(m => (m.cosUrl || m.url) === cosUrl);
                 if (item) item.assetUrl = assetUrl;
                 if (kfFirst && (kfFirst.cosUrl || kfFirst.url) === cosUrl) kfFirst.assetUrl = assetUrl;
                 if (kfLast && (kfLast.cosUrl || kfLast.url) === cosUrl) kfLast.assetUrl = assetUrl;
               }
+              // Retry with the ORIGINAL body — only swap cos URLs to asset:// URLs in content.
+              // Never rebuild from current UI: user may have changed duration/ratio/mediaItems meanwhile.
+              currentBody = {
+                ...currentBody,
+                content: currentBody.content.map(c =>
+                  c.type === "image_url" && urlMap[c.image_url.url]
+                    ? { ...c, image_url: { ...c.image_url, url: urlMap[c.image_url.url] } }
+                    : c
+                ),
+              };
               loadAssetLibrary();
             } catch (e) { console.warn("[Generate] Bulk whitelist failed:", e.message); }
           }
-          currentBody = buildRequest();
           console.log("[Generate] Retry body:", JSON.stringify(currentBody, null, 2));
           continue;
         }
