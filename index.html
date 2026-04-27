@@ -1533,6 +1533,9 @@ async function generate() {
       showKeyModal(); return;
     }
     const refMode = document.getElementById("i-ref").value;
+    // Promote already-whitelisted cos URLs to asset:// before building the body,
+    // so we don't waste a round-trip on PrivacyInformation when we already have asset_ids.
+    await reconcileAssetUrls();
     const body = buildRequest();
     console.log("[Generate] Request body:", JSON.stringify(body, null, 2));
     if (body.content.length === 0) {
@@ -2100,6 +2103,35 @@ async function loadAssetLibrary() {
   } finally {
     _assetLoading = false;
     renderAssetGrid();
+  }
+}
+
+// Look up an already-whitelisted asset_id for a given storage URL.
+function lookupAssetUrl(storageUrl) {
+  if (!storageUrl) return "";
+  const hit = assetLibrary.find(a => a.storage_url === storageUrl && a.asset_status === "ready" && a.asset_id);
+  return hit ? hit.asset_id : "";
+}
+
+// Before submitting, reconcile in-memory media with the asset library so any item that's
+// ALREADY been whitelisted goes out as asset:// on the FIRST try.
+async function reconcileAssetUrls() {
+  if (assetLibrary.length === 0) {
+    await loadAssetLibrary();
+  }
+  for (const item of mediaItems) {
+    if (!item.assetUrl) {
+      const found = lookupAssetUrl(item.cosUrl || item.url);
+      if (found) item.assetUrl = found;
+    }
+  }
+  if (kfFirst && !kfFirst.assetUrl) {
+    const found = lookupAssetUrl(kfFirst.cosUrl || kfFirst.url);
+    if (found) kfFirst.assetUrl = found;
+  }
+  if (kfLast && !kfLast.assetUrl) {
+    const found = lookupAssetUrl(kfLast.cosUrl || kfLast.url);
+    if (found) kfLast.assetUrl = found;
   }
 }
 
