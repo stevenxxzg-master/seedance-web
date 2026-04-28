@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import { config } from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -6,14 +7,16 @@ import COS from "cos-nodejs-sdk-v5";
 import crypto from "crypto";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { createReadStream, readFileSync, unlinkSync, mkdirSync } from "fs";
+import { createReadStream, createWriteStream, readFileSync, writeFileSync, unlinkSync, mkdirSync, statSync } from "fs";
+import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 import { createRequire } from "module";
 import multer from "multer";
 import os from "os";
 import {
-  hashApiKey, listAssets, findAssetByUrl, findAssetByHash, insertAsset,
-  updateAssetStatus, deleteAsset as dbDeleteAsset,
-  getPrefs, setPrefs,
+  hashApiKey, listAssets, findAssetByUrl, findAssetByHash, findAssetByAssetId,
+  insertAsset, updateAssetStatus, updateAssetThumb, getAssetById,
+  deleteAsset as dbDeleteAsset, getPrefs, setPrefs,
 } from "./db.js";
 
 const require = createRequire(import.meta.url);
@@ -24,6 +27,7 @@ config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.use(compression());
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && (origin.includes("anyfast.com.cn") || origin.includes("anyfast.ai"))) {
@@ -36,16 +40,51 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: "50mb" }));
 
-// Only serve index.html, not the whole directory (protects .env)
-// no-cache: browser must revalidate every time, so deploys take effect immediately
-app.get("/", (_req, res) => {
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.sendFile(join(__dirname, "index.html"));
-});
-app.get("/zh", (_req, res) => {
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.sendFile(join(__dirname, "index-zh.html"));
-});
+// Static assets are versioned via ?v=<hash> in HTML — safe to cache aggressively.
+// express.static defaults to ETag on, which lets unversioned requests still 304.
+app.use("/static", express.static(join(__dirname, "static"), {
+  maxAge: "365d",
+  immutable: true,
+  index: false,
+}));
+
+// Hash static assets at boot so HTML can reference them with cache-busting query strings.
+// Each deploy that changes app.css/app.js produces a new hash → new HTML body → new ETag,
+// while unchanged files get hit-or-304 from the long-cache /static/ route.
+function fileHash(p) {
+  try {
+    return crypto.createHash("sha256").update(readFileSync(p)).digest("hex").slice(0, 10);
+  } catch {
+    return "dev";
+  }
+}
+const ASSET_HASHES = {
+  "/static/app.css": fileHash(join(__dirname, "static", "app.css")),
+  "/static/app.js": fileHash(join(__dirname, "static", "app.js")),
+  "/static/app.zh.js": fileHash(join(__dirname, "static", "app.zh.js")),
+};
+
+const HTML_CACHE = new Map();
+function loadHtml(file) {
+  if (HTML_CACHE.has(file)) return HTML_CACHE.get(file);
+  const raw = readFileSync(join(__dirname, file), "utf8");
+  const out = raw
+    .replace(/__CSS_HASH__/g, ASSET_HASHES["/static/app.css"])
+    .replace(/__JS_HASH__/g, file.includes("zh") ? ASSET_HASHES["/static/app.zh.js"] : ASSET_HASHES["/static/app.js"]);
+  HTML_CACHE.set(file, out);
+  return out;
+}
+
+// HTML: revalidate every request (must-revalidate) but allow 304 via ETag.
+// express.send computes a weak ETag from the body, so unchanged HTML returns 304.
+function sendHtml(file) {
+  return (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    res.type("html").send(loadHtml(file));
+  };
+}
+app.get("/", sendHtml("index.html"));
+app.get("/zh", sendHtml("index-zh.html"));
 
 const API_BASE = process.env.API_BASE_URL || "https://www.example.com";
 
@@ -90,13 +129,14 @@ function getBase(req) {
 
 app.post("/api/generate", async (req, res) => {
   try {
+    const body = await verifyAndRehealAssetIds(req, req.body);
     const resp = await fetch(`${getBase(req)}/v1/video/generations`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${getKey(req)}`,
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(body),
     });
     const data = await resp.json();
     res.status(resp.status).json(data);
@@ -577,6 +617,105 @@ async function serverCreateAsset(req, url, name, assetType = "Image") {
   throw new Error("Asset whitelisting timeout (60s)");
 }
 
+// Process-wide cache of asset_ids we've already confirmed exist upstream.
+// Once an id is in here we never re-verify it for the lifetime of this process.
+// Restarting the server forces re-verification, which is cheap and acceptable.
+const _verifiedAssetIds = new Set();
+
+// Walk a generate-body content array and yield every asset:// URL with a setter to swap it.
+function* walkAssetUrls(body) {
+  if (!body || !Array.isArray(body.content)) return;
+  for (const c of body.content) {
+    for (const key of ["image_url", "video_url", "audio_url"]) {
+      const slot = c?.[key];
+      if (slot && typeof slot.url === "string" && slot.url.startsWith("asset://")) {
+        yield {
+          url: slot.url,
+          set: (newUrl) => { slot.url = newUrl; },
+        };
+      }
+    }
+  }
+}
+
+// Before forwarding to /v1/video/generations, make sure every asset:// id in the
+// body is actually live upstream. Volc CreateAsset can return Active for an id
+// that later vanishes / fails moderation, which makes the generation request
+// blow up with input-image-sensitive style errors. We list the ids, downgrade
+// any missing ones in our DB, re-create them via the normal whitelist flow,
+// and rewrite the body with the new ids.
+//
+// The result is cached in _verifiedAssetIds so a given id is only ever checked once.
+async function verifyAndRehealAssetIds(req, originalBody) {
+  // Deep-clone shallowly enough that we can mutate slot.url via walkAssetUrls.
+  const body = JSON.parse(JSON.stringify(originalBody || {}));
+  const slots = [...walkAssetUrls(body)];
+  if (slots.length === 0) return body;
+
+  // Volc id is the part after "asset://". Group slots by id (same id can appear twice).
+  const idToSlots = new Map();
+  for (const s of slots) {
+    const id = s.url.slice("asset://".length);
+    if (!id) continue;
+    if (!idToSlots.has(id)) idToSlots.set(id, []);
+    idToSlots.get(id).push(s);
+  }
+
+  const idsToCheck = [...idToSlots.keys()].filter((id) => !_verifiedAssetIds.has(id));
+  if (idsToCheck.length === 0) return body;
+
+  // Filter.Ids is the upstream-supported lookup. PageSize covers all ids we asked about.
+  let liveIds = new Set();
+  try {
+    const list = await volcAssetCall(req, "ListAssets", {
+      Filter: { Ids: idsToCheck, GroupType: "AIGC" },
+      PageNumber: 1, PageSize: Math.max(idsToCheck.length, 10),
+    });
+    for (const item of list.Items || []) {
+      if (item.Status === "Active" && item.Id) liveIds.add(item.Id);
+    }
+  } catch (e) {
+    // If the verify call itself fails we proceed optimistically — the upstream
+    // generate call will surface the real error and PrivacyInformation retry
+    // can still rescue it. Don't let one flaky request block submission.
+    console.warn("[VerifyAssets] ListAssets check failed:", e.message);
+    return body;
+  }
+
+  const userHash = getUserHash(req);
+  for (const id of idsToCheck) {
+    if (liveIds.has(id)) {
+      _verifiedAssetIds.add(id);
+      continue;
+    }
+    // Missing upstream — downgrade local row and re-whitelist with the same storage_url.
+    const oldAssetUrl = "asset://" + id;
+    const local = findAssetByAssetId(userHash, oldAssetUrl);
+    if (!local || !local.storage_url) {
+      // No local record to recover from; leave the body alone and let upstream complain.
+      console.warn(`[VerifyAssets] ${id} missing upstream + no local row to re-create`);
+      continue;
+    }
+    console.log(`[VerifyAssets] ${id} missing upstream, re-creating from ${local.storage_url}`);
+    updateAssetStatus(local.id, userHash, { assetId: null, assetStatus: "pending" });
+    try {
+      const assetType = local.type === "video" ? "Video" : local.type === "audio" ? "Audio" : "Image";
+      const newVolcId = await serverCreateAsset(req, local.storage_url, local.name, assetType);
+      const newAssetUrl = "asset://" + newVolcId;
+      updateAssetStatus(local.id, userHash, { assetId: newAssetUrl, assetStatus: "ready" });
+      _verifiedAssetIds.add(newVolcId);
+      for (const s of idToSlots.get(id)) s.set(newAssetUrl);
+      console.log(`[VerifyAssets] ${id} → ${newAssetUrl}`);
+    } catch (e) {
+      console.warn(`[VerifyAssets] Re-create failed for ${id}:`, e.message);
+      updateAssetStatus(local.id, userHash, { assetId: null, assetStatus: "failed" });
+      // Fall back to raw storage_url so PrivacyInformation auto-retry can pick it up.
+      for (const s of idToSlots.get(id)) s.set(local.storage_url);
+    }
+  }
+  return body;
+}
+
 // ── Asset Library API ──
 function getUserHash(req) {
   const key = req.headers["x-api-key"];
@@ -584,13 +723,188 @@ function getUserHash(req) {
   return hashApiKey(key);
 }
 
+// HMAC-signed thumbnail tokens. <img> can't send X-Api-Key headers, so we sign
+// a short-lived URL parameter that proves "user with this userHash may view this asset id".
+// Restarting the server invalidates outstanding tokens — fine, list refetch issues new ones.
+const THUMB_SIGN_SECRET = process.env.THUMB_SIGN_SECRET || crypto.randomBytes(32).toString("hex");
+const THUMB_TOKEN_TTL_SECONDS = 3600;
+
+function signThumb(userHash, assetId, expSeconds) {
+  const payload = `${userHash}:${assetId}:${expSeconds}`;
+  const sig = crypto.createHmac("sha256", THUMB_SIGN_SECRET).update(payload).digest("base64url");
+  return `${expSeconds}.${sig}`;
+}
+
+function verifyThumb(token, userHash, assetId) {
+  if (typeof token !== "string" || !token.includes(".")) return false;
+  const dot = token.indexOf(".");
+  const exp = parseInt(token.slice(0, dot), 10);
+  if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
+  const expected = signThumb(userHash, assetId, exp);
+  // Constant-time compare to avoid leaking timing info on bad tokens.
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function decorateWithThumbToken(assets, userHash) {
+  const exp = Math.floor(Date.now() / 1000) + THUMB_TOKEN_TTL_SECONDS;
+  return assets.map((a) => ({ ...a, thumb_token: signThumb(userHash, a.id, exp) }));
+}
+
 // List user's assets
 app.get("/api/assets", (req, res) => {
   try {
     const userHash = getUserHash(req);
-    res.json({ assets: listAssets(userHash) });
+    res.json({ assets: decorateWithThumbToken(listAssets(userHash), userHash) });
   } catch (err) {
     res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
+  }
+});
+
+// On-demand video thumbnail. Resolves to a real image URL via 302:
+//   - has thumb_url       → redirect to it
+//   - non-video           → redirect to storage_url
+//   - video missing thumb → ffmpeg first-frame, upload to COS/TOS, persist, redirect
+//   - any failure         → redirect to storage_url (graceful — never breaks the grid)
+// Concurrent calls for the same asset are coalesced via _thumbInflight.
+const _thumbInflight = new Map();
+
+const MAX_THUMB_SOURCE_BYTES = 300 * 1024 * 1024;
+
+async function generateVideoThumb(asset) {
+  const sourceUrl = asset.storage_url;
+  if (!sourceUrl) throw new Error("Asset has no storage_url");
+  const inputPath = join(tmpDir, `thumb-src-${asset.id}-${Date.now()}.mp4`);
+  const outputPath = join(tmpDir, `thumb-${asset.id}-${Date.now()}.jpg`);
+  try {
+    const resp = await fetch(sourceUrl);
+    if (!resp.ok) throw new Error(`Source fetch ${resp.status}`);
+    // Reject obviously oversized sources up front so a single huge upload can't
+    // OOM the box. Streaming below also enforces the cap on missing/lying headers.
+    const declared = parseInt(resp.headers.get("content-length") || "0", 10);
+    if (declared && declared > MAX_THUMB_SOURCE_BYTES) {
+      throw new Error(`Source too large: ${declared} bytes`);
+    }
+    // Stream to disk so peak RAM stays bounded — large videos used to blow up
+    // when read fully into memory via arrayBuffer().
+    await pipeline(Readable.fromWeb(resp.body), createWriteStream(inputPath));
+    const written = statSync(inputPath).size;
+    if (written > MAX_THUMB_SOURCE_BYTES) {
+      throw new Error(`Source too large after download: ${written} bytes`);
+    }
+    await execFileAsync("ffmpeg", [
+      "-y", "-ss", "0", "-i", inputPath,
+      "-frames:v", "1", "-q:v", "3", "-vf", "scale='min(640,iw)':-2",
+      outputPath,
+    ], { timeout: 30000 });
+
+    const useTos = sourceUrl.includes(".volces.com");
+    const key = `thumbs/${asset.id}_${Date.now()}.jpg`;
+    let thumbUrl;
+    if (useTos && TOS_AK && TOS_SK) {
+      const presign = tosPresignPut(key, "image/jpeg");
+      const body = readFileSync(outputPath);
+      const upResp = await fetch(presign.uploadUrl, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body });
+      if (!upResp.ok) throw new Error(`TOS thumb upload ${upResp.status}`);
+      thumbUrl = presign.fileUrl;
+    } else {
+      await new Promise((resolve, reject) => {
+        cos.putObject({ Bucket: COS_BUCKET, Region: COS_REGION, Key: key, Body: createReadStream(outputPath), ContentType: "image/jpeg" }, (err) => err ? reject(err) : resolve());
+      });
+      thumbUrl = `${COS_BASE_URL}/${key}`;
+    }
+    updateAssetThumb(asset.id, thumbUrl);
+    console.log(`[Thumb] Generated for asset ${asset.id} → ${thumbUrl}`);
+    return thumbUrl;
+  } finally {
+    try { unlinkSync(inputPath); } catch {}
+    try { unlinkSync(outputPath); } catch {}
+  }
+}
+
+app.get("/api/assets/:id/thumb", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+  const asset = getAssetById(id);
+  if (!asset) return res.status(404).json({ error: "Not found" });
+  // <img> can't send X-Api-Key, so authorize via signed token tied to (userHash, id).
+  if (!verifyThumb(req.query.t, asset.user_hash, asset.id)) {
+    return res.status(401).json({ error: "Invalid or expired thumb token" });
+  }
+  // Browser-cache the redirect target for a day so repeat views don't even hit us.
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  // Treat thumb_url == storage_url as "no thumb" — that's a bulk-whitelist legacy row
+  // pointing at the video itself, which would make the <img> load a full video stream.
+  const hasRealThumb = asset.thumb_url && asset.thumb_url !== asset.storage_url;
+  if (hasRealThumb) return res.redirect(302, asset.thumb_url);
+  if (asset.type !== "video") return res.redirect(302, asset.storage_url);
+
+  let pending = _thumbInflight.get(id);
+  if (!pending) {
+    pending = generateVideoThumb(asset).finally(() => _thumbInflight.delete(id));
+    _thumbInflight.set(id, pending);
+  }
+  try {
+    const thumbUrl = await pending;
+    res.redirect(302, thumbUrl);
+  } catch (err) {
+    console.warn(`[Thumb] Generation failed for asset ${id}:`, err.message);
+    res.redirect(302, asset.storage_url);
+  }
+});
+
+// Reconcile local asset library against upstream Volc ListAssets.
+// For every Active upstream asset whose URL matches a local row, write back
+// asset_id + asset_status='ready' so submission can use asset:// on the first try
+// (covers assets whitelisted out-of-band — other devices, sessions, etc).
+app.get("/api/assets/sync", async (req, res) => {
+  try {
+    const userHash = getUserHash(req);
+    const groupList = await volcAssetCall(req, "ListAssetGroups", {
+      Filter: { GroupType: "AIGC" }, PageNumber: 1, PageSize: 100,
+    });
+    const groups = (groupList.Items || []).filter((g) => !g.Name?.startsWith("__del__"));
+    const upstreamByUrl = new Map();
+    for (const g of groups) {
+      let page = 1;
+      const pageSize = 100;
+      while (true) {
+        const list = await volcAssetCall(req, "ListAssets", {
+          Filter: { GroupIds: [g.Id], GroupType: "AIGC" },
+          PageNumber: page, PageSize: pageSize,
+        });
+        const items = list.Items || [];
+        for (const item of items) {
+          if (item.Status === "Active" && item.URL && item.Id) {
+            upstreamByUrl.set(item.URL, item.Id);
+          }
+        }
+        if (items.length < pageSize) break;
+        page++;
+        if (page > 50) break; // safety cap (5000 assets per group)
+      }
+    }
+    let reconciled = 0;
+    for (const [url, volcId] of upstreamByUrl) {
+      const local = findAssetByUrl(userHash, url);
+      if (!local) continue;
+      const targetAssetId = "asset://" + volcId;
+      if (local.asset_status === "ready" && local.asset_id === targetAssetId) continue;
+      updateAssetStatus(local.id, userHash, { assetId: targetAssetId, assetStatus: "ready" });
+      reconciled++;
+    }
+    console.log(`[AssetSync] Upstream=${upstreamByUrl.size} reconciled=${reconciled}`);
+    res.json({
+      assets: decorateWithThumbToken(listAssets(userHash), userHash),
+      reconciled, upstreamCount: upstreamByUrl.size,
+    });
+  } catch (err) {
+    console.error("[AssetSync] Failed:", err.message);
+    const code = err.message === "API Key is required" ? 401
+      : err.message?.includes("Invalid API base") ? 400 : 502;
+    res.status(code).json({ error: err.message });
   }
 });
 
@@ -701,7 +1015,7 @@ app.post("/api/assets/bulk-whitelist", async (req, res) => {
       const name = existing?.name || hint.name || deriveNameFromUrl(url);
       const contentHash = hint.contentHash || undefined;
       const hintType = hint.type || "image";
-      const row = existing || insertAsset({ userHash, name, type: hintType, storageUrl: url, thumbUrl: url, contentHash });
+      const row = existing || insertAsset({ userHash, name, type: hintType, storageUrl: url, thumbUrl: "", contentHash });
       // insertAsset may have returned an older record (hash-matched) that's already whitelisted.
       // Reuse its asset_id instead of burning another Volc call.
       if (row.asset_status === "ready" && row.asset_id) {

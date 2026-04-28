@@ -65,6 +65,14 @@ export function findAssetByHash(userHash, contentHash) {
   return stmtFindByHash.get(userHash, contentHash) || null;
 }
 
+const stmtFindByAssetId = db.prepare(
+  "SELECT * FROM assets WHERE user_hash = ? AND asset_id = ? LIMIT 1"
+);
+export function findAssetByAssetId(userHash, assetId) {
+  if (!assetId) return null;
+  return stmtFindByAssetId.get(userHash, assetId) || null;
+}
+
 const stmtInsert = db.prepare(`
   INSERT INTO assets (user_hash, name, type, storage_url, thumb_url, content_hash)
   VALUES (?, ?, ?, ?, ?, ?)
@@ -104,6 +112,18 @@ const stmtUpdateStatus = db.prepare(`
 `);
 export function updateAssetStatus(id, userHash, { assetId, assetStatus }) {
   stmtUpdateStatus.run(assetId || null, assetStatus, id, userHash);
+  return stmtGetById.get(id);
+}
+
+const stmtUpdateThumb = db.prepare(`
+  UPDATE assets SET thumb_url = ?, updated_at = unixepoch() WHERE id = ?
+`);
+export function updateAssetThumb(id, thumbUrl) {
+  stmtUpdateThumb.run(thumbUrl, id);
+  return stmtGetById.get(id);
+}
+
+export function getAssetById(id) {
   return stmtGetById.get(id);
 }
 
