@@ -908,10 +908,9 @@ function renderStack() {
     div.style.top = offsetY + "px";
 
     let inner = "";
-    if (item.thumbUrl && item.type === "image") {
-      inner = `<img src="${esc(item.thumbUrl)}">`;
-    } else if (item.thumbUrl && item.type === "video") {
-      inner = `<img src="${esc(item.thumbUrl)}">`;
+    const stackSrc = stackThumbSrc(item);
+    if (stackSrc && (item.type === "image" || item.type === "video")) {
+      inner = `<img src="${esc(stackSrc)}">`;
     } else {
       const icons = { image: "🖼", video: "🎬", audio: "🎵" };
       inner = `<div class="stack-icon">${icons[item.type]}</div>`;
@@ -925,6 +924,26 @@ function renderStack() {
     stackItems.appendChild(div);
   });
   updateCostLabel();
+}
+
+// Pick the right URL for a stack-item thumbnail. Image: thumbUrl is fine.
+// Video: thumbUrl is sometimes the mp4 itself (legacy uploads, or prefs reload
+// where we only had cosUrl) — `<img src=mp4>` renders broken. When we know the
+// asset_id, prefer the signed /api/assets/{id}/thumb endpoint (server returns the
+// real first-frame, generating it on first miss). Falls back to thumbUrl when
+// it's a blob: (fresh upload before persistedThumbUrl set) or when there's
+// nothing better.
+function stackThumbSrc(item) {
+  if (item.type === "video" && item.assetUrl) {
+    const a = (typeof assetLibrary !== "undefined" ? assetLibrary : []).find(x => x.asset_id === item.assetUrl);
+    if (a && a.id != null && a.thumb_token) {
+      return `/api/assets/${a.id}/thumb?t=${encodeURIComponent(a.thumb_token)}`;
+    }
+  }
+  if (item.thumbUrl && (item.thumbUrl.startsWith("blob:") || !item.thumbUrl.endsWith(".mp4"))) {
+    return item.thumbUrl;
+  }
+  return "";
 }
 
 function generateRotations(n) {

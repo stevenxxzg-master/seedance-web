@@ -907,10 +907,9 @@ function renderStack() {
     div.style.top = offsetY + "px";
 
     let inner = "";
-    if (item.thumbUrl && item.type === "image") {
-      inner = `<img src="${esc(item.thumbUrl)}">`;
-    } else if (item.thumbUrl && item.type === "video") {
-      inner = `<img src="${esc(item.thumbUrl)}">`;
+    const stackSrc = stackThumbSrc(item);
+    if (stackSrc && (item.type === "image" || item.type === "video")) {
+      inner = `<img src="${esc(stackSrc)}">`;
     } else {
       const icons = { image: "🖼", video: "🎬", audio: "🎵" };
       inner = `<div class="stack-icon">${icons[item.type]}</div>`;
@@ -924,6 +923,22 @@ function renderStack() {
     stackItems.appendChild(div);
   });
   updateCostLabel();
+}
+
+// 选 stack 缩略图 src。视频的 thumbUrl 有时是 mp4 本身（老上传、或者 prefs
+// reload 时只有 cosUrl），`<img src=mp4>` 渲染破图。已知 asset_id 时优先走签名
+// /api/assets/{id}/thumb，server 返回真实首帧（首次按需生成）。其余 fallback。
+function stackThumbSrc(item) {
+  if (item.type === "video" && item.assetUrl) {
+    const a = (typeof assetLibrary !== "undefined" ? assetLibrary : []).find(x => x.asset_id === item.assetUrl);
+    if (a && a.id != null && a.thumb_token) {
+      return `/api/assets/${a.id}/thumb?t=${encodeURIComponent(a.thumb_token)}`;
+    }
+  }
+  if (item.thumbUrl && (item.thumbUrl.startsWith("blob:") || !item.thumbUrl.endsWith(".mp4"))) {
+    return item.thumbUrl;
+  }
+  return "";
 }
 
 function generateRotations(n) {
