@@ -971,7 +971,7 @@ async function handleFileForItem(id, file) {
   if (!file) return;
   pendingUploads++;
   const item = mediaItems.find(m => m.id === id);
-  if (!item) return;
+  if (!item) { pendingUploads--; return; }
   item.name = file.name;
   item.file = file;
 
@@ -990,23 +990,19 @@ async function handleFileForItem(id, file) {
   try {
     let fileUrl, hash, reused = false, reusedAsset = null, thumbUrl = item.thumbUrl;
     if (item.type === "video") {
-      // Dedup via first-frame hash before uploading
+      const videoHash = await sha256Hex(file);
+      const existing = await lookupAssetByHash(videoHash);
+      if (existing && existing.storage_url && existing.type === "video") {
+        showToast({ type: "success", title: existing.asset_status === "ready" ? "Reused video (whitelisted)" : "Reused video", desc: file.name || existing.name || "" });
+        fileUrl = existing.storage_url;
+        hash = videoHash;
+        reused = true;
+        reusedAsset = existing;
+        thumbUrl = existing.thumb_url || thumbUrl;
+      }
       let thumbBlob = null;
       if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
         try { thumbBlob = await fetch(item.thumbUrl).then(r => r.blob()); } catch { /* non-fatal */ }
-      }
-      if (thumbBlob) {
-        const thumbHash = await sha256Hex(thumbBlob);
-        const existing = await lookupAssetByHash(thumbHash);
-        if (existing && existing.storage_url) {
-          showToast({ type: "success", title: "Reused video", desc: file.name || existing.name || "" });
-          fileUrl = existing.storage_url;
-          hash = thumbHash;
-          reused = true;
-          reusedAsset = existing;
-          thumbUrl = existing.thumb_url || thumbUrl;
-          item.contentHash = thumbHash;
-        }
       }
       if (!reused) {
         // Upload video and first-frame thumbnail in parallel
@@ -1016,8 +1012,8 @@ async function handleFileForItem(id, file) {
           ? new File([thumbBlob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" })
           : null;
         const [videoResp, uploadedThumbUrl] = await Promise.all([
-          fetch("/api/upload/video", { method: "POST", body: form }),
-          thumbFile ? uploadAssetWithHash(thumbFile).then(r => r.fileUrl).catch(() => null) : Promise.resolve(null),
+          fetch("/api/upload/video", { method: "POST", headers: uploadHeaders(), body: form }),
+          thumbFile ? uploadAssetWithHash(thumbFile, null, { dedupe: false }).then(r => r.fileUrl).catch(() => null) : Promise.resolve(null),
         ]);
         if (!videoResp.ok) {
           const err = await videoResp.json().catch(() => ({}));
@@ -1025,8 +1021,7 @@ async function handleFileForItem(id, file) {
         }
         ({ fileUrl } = await videoResp.json());
         if (uploadedThumbUrl) thumbUrl = uploadedThumbUrl;
-        // Store thumb hash for future dedup lookups
-        if (thumbBlob) hash = await sha256Hex(thumbBlob);
+        hash = videoHash;
         item.contentHash = hash || "";
       }
     } else {
@@ -1040,6 +1035,7 @@ async function handleFileForItem(id, file) {
     item.cosUrl = fileUrl;
     item.contentHash = hash || "";
     item.assetUrl = reusedAsset?.asset_id || "";
+    item.assetStatus = reusedAsset?.asset_status || "";
     item.persistedThumbUrl = thumbUrl || "";
     renderStack();
     if (reused && reusedAsset) {
@@ -1048,7 +1044,7 @@ async function handleFileForItem(id, file) {
       assetLibrary.unshift(reusedAsset);
       renderAssetGrid();
     } else {
-      registerAssetOnUpload(item);
+      await registerAssetOnUpload(item);
     }
   } catch (err) {
     alert("Upload failed: " + (err.message || "Please retry"));
@@ -1108,12 +1104,15 @@ function renderKfCard(which) {
 async function uploadKfFile(which, file) {
   const obj = which === "first" ? kfFirst : kfLast;
   if (!obj) return;
+  pendingUploads++;
   try {
     const { fileUrl, hash, reused, asset } = await uploadAssetWithHash(file);
     obj.url = fileUrl;
     obj.cosUrl = fileUrl;
+    obj.type = "image";
     obj.contentHash = hash;
     obj.assetUrl = asset?.asset_id || "";
+    obj.assetStatus = asset?.asset_status || "";
     console.log(`[KF Upload] ${which} uploaded:`, fileUrl, reused ? "(reused)" : "");
     if (reused && asset) {
       const existingIdx = assetLibrary.findIndex(a => a.id === asset.id);
@@ -1121,23 +1120,42 @@ async function uploadKfFile(which, file) {
       assetLibrary.unshift(asset);
       renderAssetGrid();
     } else {
-      registerAssetOnUpload({ name: file.name, type: "image", cosUrl: fileUrl, url: fileUrl, contentHash: hash });
+      await registerAssetOnUpload(obj);
     }
   } catch (err) {
     alert("Upload failed: " + (err.message || "Please retry"));
     if (which === "first") kfFirst = null; else kfLast = null;
     renderKfCard(which);
+  } finally {
+    pendingUploads--;
   }
 }
 
 // ── Build request ──
-function apiHeaders() {
+function preferredStorage() {
+  const base = document.getElementById("i-base")?.value || "";
+  const host = location.hostname || "";
+  return base.includes("anyfast.com.cn") || host.includes("anyfast.com.cn") ? "tos" : "cos";
+}
+
+function uploadHeaders() {
   const key = document.getElementById("i-key").value.trim();
   const base = document.getElementById("i-base").value.trim();
-  const h = { "Content-Type": "application/json" };
+  const h = { "X-Storage": preferredStorage() };
   if (key) h["X-Api-Key"] = key;
   if (base) h["X-Api-Base"] = encodeURI(base);
   return h;
+}
+
+function apiHeaders() {
+  return { ...uploadHeaders(), "Content-Type": "application/json" };
+}
+
+async function readJsonResponse(resp) {
+  const text = await resp.text();
+  if (!text) return {};
+  try { return JSON.parse(text); }
+  catch { return { error: text }; }
 }
 
 // Strip characters Seedance / upstream models choke on when emitted in the prompt
@@ -1157,38 +1175,45 @@ function buildRequest() {
   if (prompt) content.push({ type: "text", text: prompt });
 
   const refMode = document.getElementById("i-ref").value;
-  // Upstream only accepts asset:// or https:// URLs. Anything else (blob:, "",
-  // null, missing scheme) crashes with "invalid url scheme" — guard at the
-  // boundary so a stale UI state can never produce a poisoned request body.
-  const pickUrl = (item) => {
-    const candidates = [item.assetUrl, item.cosUrl, item.url];
+  // Keep the page state centered on stable storage URLs. The server resolves
+  // image/video storage URLs to asset:// just before forwarding upstream.
+  const pickStorageOrAsset = (item) => {
+    const candidates = [item.cosUrl, item.url, item.assetUrl];
     for (const u of candidates) {
       if (typeof u === "string" && (u.startsWith("asset://") || u.startsWith("https://"))) return u;
     }
     return "";
   };
 
+  // Capture the cosUrl alongside every asset:// reference as diagnostic context;
+  // the server strips these private fields before forwarding upstream.
+  const cosOf = (item) => {
+    const u = item.cosUrl || item.url;
+    return (typeof u === "string" && u.startsWith("https://")) ? u : "";
+  };
+
   if (refMode === "keyframes") {
-    // Keyframe mode: use kfFirst / kfLast
     if (kfFirst) {
-      const u = pickUrl(kfFirst);
-      if (u) content.push({ type: "image_url", image_url: { url: u }, role: "first_frame" });
+      const u = pickStorageOrAsset(kfFirst);
+      if (u) content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(kfFirst), _name: kfFirst.name || "", _contentHash: kfFirst.contentHash || "" }, role: "first_frame" });
     }
     if (kfLast) {
-      const u = pickUrl(kfLast);
-      if (u) content.push({ type: "image_url", image_url: { url: u }, role: "last_frame" });
+      const u = pickStorageOrAsset(kfLast);
+      if (u) content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(kfLast), _name: kfLast.name || "", _contentHash: kfLast.contentHash || "" }, role: "last_frame" });
     }
   } else {
-    // All-reference mode: use mediaItems stack
     for (const item of mediaItems) {
-      const u = pickUrl(item);
+      if (item.type === "audio") {
+        const u = pickStorageOrAsset(item);
+        if (u) content.push({ type: "audio_url", audio_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_audio" });
+        continue;
+      }
+      const u = pickStorageOrAsset(item);
       if (!u) continue;
       if (item.type === "image") {
-        content.push({ type: "image_url", image_url: { url: u }, role: "reference_image" });
+        content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_image" });
       } else if (item.type === "video") {
-        content.push({ type: "video_url", video_url: { url: u }, role: "reference_video" });
-      } else if (item.type === "audio") {
-        content.push({ type: "audio_url", audio_url: { url: u }, role: "reference_audio" });
+        content.push({ type: "video_url", video_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_video" });
       }
     }
   }
@@ -1227,9 +1252,30 @@ async function generate() {
       showKeyModal(); return;
     }
     const refMode = document.getElementById("i-ref").value;
-    // Promote already-whitelisted cos URLs to asset:// before building the body,
-    // so we don't waste a round-trip on PrivacyInformation when we already have asset_ids.
+    // Promote already-whitelisted cos URLs to asset:// AND proactively whitelist
+    // anything still on a cosUrl, because seedance rejects raw-cosUrl image/video
+    // with the privacy guard. After this returns, image/video items either have
+    // an asset:// or were unable to whitelist.
     await reconcileAssetUrls();
+
+    // Surface visual items that failed to acquire an asset_id — buildRequest will
+    // drop them, leading to a quietly-shorter request. Better to fail loudly so
+    // the user knows to retry instead of getting silently degraded output.
+    const visualSources = refMode === "keyframes"
+      ? [kfFirst, kfLast].filter(Boolean)
+      : mediaItems.filter(m => m && m.type !== "audio" && (m.cosUrl || m.url));
+    const stranded = visualSources.filter(m => !(typeof m.assetUrl === "string" && m.assetUrl.startsWith("asset://")));
+    if (stranded.length > 0) {
+      btn.disabled = false; btn.classList.remove("sending");
+      showToast({
+        type: "warn",
+        title: "Whitelisting in progress",
+        desc: `${stranded.length} item(s) still preparing. Please retry in a few seconds.`,
+        duration: 4000,
+      });
+      return;
+    }
+
     const body = buildRequest();
     console.log("[Generate] Request body:", JSON.stringify(body, null, 2));
     if (body.content.length === 0) {
@@ -1269,23 +1315,21 @@ async function runSubmit(task, body) {
     try {
       console.log(`[Generate] Attempt ${attempt}/3...`);
       const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(currentBody) });
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       const errMsg = (typeof data.error === "string" ? data.error : data.error?.message) || data.message || data.msg || "";
       if (!resp.ok || (data.code && data.code !== "success")) {
         lastErr = errMsg || JSON.stringify(data);
         const rawJson = JSON.stringify(data);
         console.warn(`[Generate] Attempt ${attempt} failed:`, lastErr);
-        // Upstream rejected an asset_id whose URL turned invalid mid-life. We have
-        // the original cosUrl locally — silently re-whitelist (forceRecreate) and
-        // swap the body, no modal. Falls through to ASSETS_UNRECOVERABLE / generic
-        // retry if recovery isn't possible.
-        if (rawJson.includes("invalid url scheme") && attempt < 3) {
-          console.log("[Generate] invalid url scheme detected, silently rehealing...");
-          const recovered = await silentRehealSchemeError(currentBody, task);
-          if (recovered) {
-            currentBody = recovered;
-            continue;
-          }
+        // Upstream 'invalid url scheme' is usually an indexing/resolve delay
+        // between the asset service and generation service. Do not rebuild the
+        // permanent asset here; retry the same body so one upload maps to one
+        // asset_id.
+        if ((rawJson.includes("invalid url scheme") || data.code === "ASSET_SYNC_PENDING") && attempt < 3) {
+          const waitMs = attempt === 1 ? 15000 : 30000;
+          console.log(`[Generate] asset sync pending — waiting ${waitMs / 1000}s before retrying same body`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
         }
         // Upstream asset_id orphaned → ask user to confirm re-upload, then retry
         if (data.code === "ASSETS_UNRECOVERABLE" && Array.isArray(data.assetIds) && data.assetIds.length && attempt < 3) {
@@ -1297,8 +1341,22 @@ async function runSubmit(task, body) {
           lastErr = "Cancelled by user";
           break;
         }
-        // PrivacyInformation → server-side bulk whitelist, then retry
+        // PrivacyInformation → server-side bulk whitelist, then retry.
+        // If the body already has every image/video on asset://, retrying won't
+        // change anything — the upstream privacy guard is rejecting the actual
+        // image content, not the URL form. Bail out so the user gets the real
+        // "image may contain real person" message instead of waiting through
+        // doomed retries.
         if ((lastErr.includes("PrivacyInformation") || rawJson.includes("PrivacyInformation")) && attempt < 3) {
+          const allVisualOnAsset = (currentBody.content || []).every(c => {
+            if (c.type !== "image_url" && c.type !== "video_url") return true;
+            const url = c.image_url?.url || c.video_url?.url || "";
+            return url.startsWith("asset://");
+          });
+          if (allVisualOnAsset) {
+            console.log("[Generate] PrivacyInformation persists with all-asset body — image content rejected by upstream, not retrying");
+            break;
+          }
           console.log("[Generate] PrivacyInformation detected, bulk whitelisting...");
           task.status = "whitelisting";
           task.whitelistStart = Date.now();
@@ -1323,7 +1381,7 @@ async function runSubmit(task, body) {
                 method: "POST", headers: assetHeaders(),
                 body: JSON.stringify({ storageUrls, items }),
               });
-              const { results, errors: wlErrors } = await resp.json();
+              const { results, errors: wlErrors } = await readJsonResponse(resp);
               const urlMap = {};
               for (const [cosUrl, assetUrl] of Object.entries(results || {})) {
                 if (!assetUrl) continue;
@@ -1415,7 +1473,7 @@ async function pollAll() {
   for (const task of running) {
     try {
       const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       task.response = data;
       if (resp.ok && data.code !== "fail_to_fetch_task") {
         const parsed = parseResponse(data);
@@ -1712,8 +1770,11 @@ function clearTasks(){if(!confirm("Clear all task history?"))return;tasks.length
 function friendlyError(msg) {
   if (!msg) return "生成失败，请重试";
   if (msg === "Cancelled by user" || msg === "已取消重新加白") return "已取消";
+  if (msg.includes("Unexpected end of JSON input") || msg.includes("empty response body")) return "服务返回空响应，请稍后重试";
   if (msg.includes("timeout") || msg.includes("Timeout")) return "服务繁忙，请稍后重试";
   if (msg.includes("resolve asset")) return "素材处理中，请稍后重试";
+  if (msg.includes("ASSET_SYNC_PENDING")) return "素材已加白但上游暂未同步，请稍后重试";
+  if (msg.includes("invalid url scheme")) return "素材已加白但上游暂未同步，请稍后重试";
   if (msg.includes("image_url")) return "图片处理异常，请重新上传图片后重试";
   if (msg.includes("SensitiveContent") || msg.includes("PrivacyInformation")) return "图片内容不符合规范，请更换图片";
   if (msg.includes("content moderation")) return "内容审核未通过，请调整提示词或素材";
@@ -1809,7 +1870,7 @@ async function recoverUnrecoverableAssets(currentBody, assetIds, task) {
       method: "POST", headers: assetHeaders(),
       body: JSON.stringify({ storageUrls, items, forceRecreate: storageUrls }),
     });
-    const { results, errors: wlErrors } = await resp.json();
+    const { results, errors: wlErrors } = await readJsonResponse(resp);
     const oldToNew = {};
     for (const r of recoverable) {
       const newAssetUrl = results?.[r.cosUrl];
@@ -1841,68 +1902,6 @@ async function recoverUnrecoverableAssets(currentBody, assetIds, task) {
   } catch (e) {
     console.warn("[Recover] bulk-whitelist failed:", e.message);
     showToast({ type: "warn", title: "Re-upload failed", desc: e.message, duration: 5000 });
-    return null;
-  }
-}
-
-// Silent recovery for upstream "invalid url scheme" — rebuilds the suspect asset_ids
-// via bulk-whitelist with forceRecreate, swaps them in the body, and returns the new
-// body. No modal: every id we touch already has a live cosUrl on this client, so the
-// user shouldn't have to confirm anything. Returns null if nothing was recoverable.
-async function silentRehealSchemeError(currentBody, task) {
-  const snap = task?.input || {};
-  const suspects = [];
-  for (const c of (currentBody?.content || [])) {
-    const slot = c.image_url || c.video_url || c.audio_url;
-    const url = slot?.url;
-    if (typeof url === "string" && url.startsWith("asset://")) {
-      const info = lookupAssetByAssetUrl(url, snap);
-      if (info?.cosUrl) suspects.push({ assetId: url, ...info });
-    }
-  }
-  if (suspects.length === 0) return null;
-  const seen = new Set();
-  const unique = suspects.filter(s => seen.has(s.assetId) ? false : (seen.add(s.assetId), true));
-  task.status = "whitelisting";
-  task.whitelistStart = Date.now();
-  renderTasks();
-  try {
-    const storageUrls = unique.map(r => r.cosUrl);
-    const items = unique.map(r => ({ url: r.cosUrl, contentHash: r.contentHash, name: r.name, type: r.type }));
-    const resp = await fetch("/api/assets/bulk-whitelist", {
-      method: "POST", headers: assetHeaders(),
-      body: JSON.stringify({ storageUrls, items, forceRecreate: storageUrls }),
-    });
-    const { results, errors: wlErrors } = await resp.json();
-    const oldToNew = {};
-    for (const r of unique) {
-      const newAssetUrl = results?.[r.cosUrl];
-      if (!newAssetUrl || newAssetUrl === r.assetId) continue;
-      oldToNew[r.assetId] = newAssetUrl;
-      const item = mediaItems.find(m => m.assetUrl === r.assetId);
-      if (item) item.assetUrl = newAssetUrl;
-      if (kfFirst && kfFirst.assetUrl === r.assetId) kfFirst.assetUrl = newAssetUrl;
-      if (kfLast && kfLast.assetUrl === r.assetId) kfLast.assetUrl = newAssetUrl;
-    }
-    const firstErr = Object.values(wlErrors || {})[0];
-    if (firstErr) showToast({ type: "warn", title: "Some assets failed to whitelist", desc: firstErr, duration: 5000 });
-    if (Object.keys(oldToNew).length === 0) return null;
-    const swapUrl = (c, key) => oldToNew[c[key]?.url]
-      ? { ...c, [key]: { ...c[key], url: oldToNew[c[key].url] } }
-      : c;
-    const newBody = {
-      ...currentBody,
-      content: currentBody.content.map(c => {
-        if (c.type === "image_url") return swapUrl(c, "image_url");
-        if (c.type === "video_url") return swapUrl(c, "video_url");
-        if (c.type === "audio_url") return swapUrl(c, "audio_url");
-        return c;
-      }),
-    };
-    loadAssetLibrary();
-    return newBody;
-  } catch (e) {
-    console.warn("[SchemeReheal] bulk-whitelist failed:", e.message);
     return null;
   }
 }
@@ -1943,12 +1942,7 @@ let assetLibrary = [];
 let _assetLoading = false;
 
 function assetHeaders() {
-  const key = document.getElementById("i-key").value.trim();
-  const base = document.getElementById("i-base").value.trim();
-  const h = { "Content-Type": "application/json" };
-  if (key) h["X-Api-Key"] = key;
-  if (base) h["X-Api-Base"] = encodeURI(base);
-  return h;
+  return apiHeaders();
 }
 
 // ── Toast notifications ──
@@ -2015,32 +2009,34 @@ async function lookupAssetByHash(hash) {
   const key = document.getElementById("i-key").value.trim();
   if (!key) return null;
   try {
-    const r = await fetch(`/api/assets/by-hash/${hash}`, { headers: { "X-Api-Key": key } });
+    const r = await fetch(`/api/assets/by-hash/${hash}`, { headers: uploadHeaders() });
     if (!r.ok) return null;
     const data = await r.json();
     return data.asset || null;
   } catch { return null; }
 }
 
-async function uploadAssetWithHash(file, onProgress) {
+async function uploadAssetWithHash(file, onProgress, options = {}) {
   const hash = await sha256Hex(file);
-  const existing = await lookupAssetByHash(hash);
-  if (existing && existing.storage_url) {
-    const statusDesc = existing.asset_status === "ready"
-      ? "Reused asset (whitelisted)"
-      : "Reused asset";
-    showToast({
-      type: "success",
-      title: statusDesc,
-      desc: file.name || existing.name || "",
-    });
-    return { fileUrl: existing.storage_url, hash, reused: true, asset: existing };
+  if (options.dedupe !== false) {
+    const existing = await lookupAssetByHash(hash);
+    if (existing && existing.storage_url) {
+      const statusDesc = existing.asset_status === "ready"
+        ? "Reused asset (whitelisted)"
+        : "Reused asset";
+      showToast({
+        type: "success",
+        title: statusDesc,
+        desc: file.name || existing.name || "",
+      });
+      return { fileUrl: existing.storage_url, hash, reused: true, asset: existing };
+    }
   }
   const ext = ((file.name || "file").split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
   const clientKey = `assets/${hash}.${ext || "bin"}`;
   const presignResp = await fetch("/api/cos/presign", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...uploadHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({
       filename: file.name || `${hash}.${ext || "bin"}`,
       contentType: file.type || "application/octet-stream",
@@ -2090,7 +2086,7 @@ async function loadAssetLibrary() {
   try {
     const resp = await fetch("/api/assets", { headers: assetHeaders() });
     if (resp.ok) {
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       assetLibrary = data.assets || [];
     }
   } catch (e) {
@@ -2110,40 +2106,85 @@ function lookupAssetUrl(storageUrl) {
 
 // Before submitting, reconcile in-memory media with the asset library so any item that's
 // ALREADY been whitelisted goes out as asset:// on the FIRST try.
-// Hits upstream Volc ListAssets via /api/assets/sync so out-of-band whitelists
-// (other devices/sessions) are picked up too.
+// Seedance hard requirement: any media that goes through generate as a raw cosUrl
+// is rejected by the upstream privacy/sensitive-content guard. So if we still
+// have items without an asset:// after the lookup pass, we proactively bulk-
+// whitelist them here — the generate call should NEVER see a cosUrl for image/
+// video items if we can avoid it.
 async function reconcileAssetUrls() {
-  const key = document.getElementById("i-key").value.trim();
-  if (key) {
-    try {
-      const resp = await fetch("/api/assets/sync", { headers: assetHeaders() });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (Array.isArray(data.assets)) {
-          assetLibrary = data.assets;
-          renderAssetGrid();
-        }
-      }
-    } catch (e) {
-      console.warn("[AssetSync] Failed:", e.message);
-    }
-  }
   if (assetLibrary.length === 0) {
     await loadAssetLibrary();
   }
+  // Pass 1: cheap lookup — pick up any asset_id that's already ready upstream.
   for (const item of mediaItems) {
     if (!item.assetUrl) {
       const found = lookupAssetUrl(item.cosUrl || item.url);
-      if (found) item.assetUrl = found;
+      if (found) { item.assetUrl = found; item.assetStatus = "ready"; }
     }
   }
   if (kfFirst && !kfFirst.assetUrl) {
     const found = lookupAssetUrl(kfFirst.cosUrl || kfFirst.url);
-    if (found) kfFirst.assetUrl = found;
+    if (found) { kfFirst.assetUrl = found; kfFirst.assetStatus = "ready"; }
   }
   if (kfLast && !kfLast.assetUrl) {
     const found = lookupAssetUrl(kfLast.cosUrl || kfLast.url);
-    if (found) kfLast.assetUrl = found;
+    if (found) { kfLast.assetUrl = found; kfLast.assetStatus = "ready"; }
+  }
+
+  // Pass 2: proactively whitelist anything still on a cosUrl. We exclude audio
+  // because seedance accepts raw audio cosUrls without tripping the guard,
+  // and the upstream Volc Asset API audio path is flakier.
+  const refMode = document.getElementById("i-ref")?.value || "all";
+  const targets = [];
+  const collect = (item) => {
+    if (!item) return;
+    if (item.assetUrl) return;
+    if (item.assetStatus === "pending") return;
+    if (item.type === "audio") return;
+    const url = item.cosUrl || item.url;
+    if (!url || !url.startsWith("https://")) return;
+    targets.push({ item, url });
+  };
+  if (refMode === "keyframes") {
+    collect(kfFirst);
+    collect(kfLast);
+  } else {
+    for (const m of mediaItems) collect(m);
+  }
+  if (targets.length === 0) return;
+
+  try {
+    const seen = new Set();
+    const unique = targets.filter(t => seen.has(t.url) ? false : (seen.add(t.url), true));
+    const storageUrls = unique.map(t => t.url);
+    const items = unique.map(t => ({
+      url: t.url,
+      contentHash: t.item.contentHash || "",
+      name: t.item.name || "",
+      type: t.item.type || "image",
+    }));
+    const resp = await fetch("/api/assets/bulk-whitelist", {
+      method: "POST", headers: assetHeaders(),
+      body: JSON.stringify({ storageUrls, items }),
+    });
+    if (!resp.ok) {
+      console.warn("[Reconcile] bulk-whitelist HTTP", resp.status);
+      return;
+    }
+    const { results, errors } = await readJsonResponse(resp);
+    if (!results) return;
+    for (const t of targets) {
+      const assetUrl = results[t.url];
+      if (assetUrl) {
+        t.item.assetUrl = assetUrl;
+        t.item.assetStatus = "ready";
+      } else if (errors?.[t.url]) {
+        t.item.assetStatus = "failed";
+      }
+    }
+    loadAssetLibrary();
+  } catch (e) {
+    console.warn("[Reconcile] proactive whitelist failed:", e.message);
   }
 }
 
@@ -2330,6 +2371,7 @@ function insertSavedAsset(id) {
       name: a.name || "Asset",
       cosUrl: a.storage_url,
       assetUrl: a.asset_id || null,
+      assetStatus: a.asset_status || "",
     };
     mediaItems.push(newItem);
     renderStack();
@@ -2346,7 +2388,9 @@ function insertSavedAsset(id) {
 
 async function registerAssetOnUpload(item) {
   const key = document.getElementById("i-key").value.trim();
-  if (!key) return;
+  if (!key) return null;
+  const storageUrl = item.cosUrl || item.url;
+  if (!storageUrl || !storageUrl.startsWith("https://")) return null;
   try {
     const resp = await fetch("/api/assets", {
       method: "POST",
@@ -2354,24 +2398,28 @@ async function registerAssetOnUpload(item) {
       body: JSON.stringify({
         name: item.name || "",
         type: item.type || "image",
-        storageUrl: item.cosUrl || item.url,
+        storageUrl,
         thumbUrl: item.persistedThumbUrl || "",
         contentHash: item.contentHash || "",
       }),
     });
     if (resp.ok) {
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       if (data.asset) {
         if (data.asset.asset_id && data.asset.asset_status === "ready") {
           item.assetUrl = data.asset.asset_id;
         }
+        item.assetStatus = data.asset.asset_status || "";
         const idx = assetLibrary.findIndex(a => a.id === data.asset.id);
         if (idx >= 0) assetLibrary[idx] = data.asset;
         else assetLibrary.unshift(data.asset);
         renderAssetGrid();
+        syncPrefs();
+        return data.asset;
       }
     }
   } catch (e) { console.warn("[AssetLib] Register failed:", e.message); }
+  return null;
 }
 
 function toggleAbout() {
@@ -2412,3 +2460,43 @@ function requireApiKey(callback) {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && document.getElementById("key-modal-ov").style.display === "flex") closeKeyModal();
 });
+
+// ── Auto-reload on new deploy ──
+// Pull our own bundle hash off the <script src="...?v=HASH"> tag the server
+// rendered. When /api/version reports a different hash, the server has been
+// redeployed; reload so the user runs the new code (otherwise old tabs keep
+// hitting bugs we already fixed). We hold off reloading while a generation is
+// in flight so we don't drop the user's work.
+const _selfJsHash = (() => {
+  const scripts = document.querySelectorAll('script[src*="/static/app.js"]');
+  for (const s of scripts) {
+    const m = (s.getAttribute("src") || "").match(/[?&]v=([^&]+)/);
+    if (m) return m[1];
+  }
+  return null;
+})();
+let _reloadScheduled = false;
+async function checkVersion() {
+  if (_reloadScheduled || !_selfJsHash) return;
+  try {
+    const r = await fetch("/api/version", { cache: "no-store" });
+    if (!r.ok) return;
+    const v = await r.json();
+    if (v && typeof v.js === "string" && v.js && v.js !== _selfJsHash) {
+      _reloadScheduled = true;
+      const tryReload = () => {
+        if (hasRunningTasks() || pendingUploads > 0 || document.hidden) {
+          setTimeout(tryReload, 5000);
+          return;
+        }
+        console.log(`[Version] new bundle (${v.js}), reloading…`);
+        location.reload();
+      };
+      tryReload();
+    }
+  } catch { /* offline / network blip — try again next tick */ }
+}
+setInterval(checkVersion, 60000);
+// Don't run the first check immediately on load — give the page time to settle
+// and the user a moment to see the UI before any potential reload kicks in.
+setTimeout(checkVersion, 30000);

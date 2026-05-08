@@ -78,7 +78,7 @@ const stmtInsert = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?)
 `);
 const stmtUpdateUrl = db.prepare(`
-  UPDATE assets SET storage_url = ?, name = ?, updated_at = unixepoch()
+  UPDATE assets SET storage_url = ?, name = COALESCE(NULLIF(?, ''), name), updated_at = unixepoch()
   WHERE id = ? AND user_hash = ?
 `);
 const stmtGetById = db.prepare("SELECT * FROM assets WHERE id = ?");
@@ -87,12 +87,6 @@ export function insertAsset({ userHash, name, type, storageUrl, thumbUrl, conten
   if (contentHash) {
     const existing = findAssetByHash(userHash, contentHash);
     if (existing) {
-      // If stored URL is stale (points to /uploads/ which gets cleaned daily),
-      // refresh it with the new storage_url
-      if (existing.storage_url && existing.storage_url.includes("/uploads/")) {
-        stmtUpdateUrl.run(storageUrl, name || existing.name, existing.id, userHash);
-        return stmtGetById.get(existing.id);
-      }
       return existing;
     }
   }
@@ -104,6 +98,48 @@ export function insertAsset({ userHash, name, type, storageUrl, thumbUrl, conten
     userHash, name || "", type || "image", storageUrl, thumbUrl || "", contentHash || null
   );
   return stmtGetById.get(info.lastInsertRowid);
+}
+
+const stmtUpdateIdentity = db.prepare(`
+  UPDATE assets SET
+    name = COALESCE(NULLIF(?, ''), name),
+    type = COALESCE(NULLIF(?, ''), type),
+    storage_url = COALESCE(NULLIF(?, ''), storage_url),
+    thumb_url = COALESCE(NULLIF(?, ''), thumb_url),
+    content_hash = COALESCE(NULLIF(?, ''), content_hash),
+    asset_id = ?,
+    asset_status = COALESCE(NULLIF(?, ''), asset_status),
+    updated_at = unixepoch()
+  WHERE id = ? AND user_hash = ?
+`);
+
+export function upsertAssetIdentity({
+  userHash, name, type, storageUrl, thumbUrl, contentHash, assetId, assetStatus,
+}) {
+  let existing = contentHash ? findAssetByHash(userHash, contentHash) : null;
+  if (!existing && storageUrl) existing = findAssetByUrl(userHash, storageUrl);
+  if (!existing && assetId) existing = findAssetByAssetId(userHash, assetId);
+
+  if (!existing) {
+    if (!storageUrl) return null;
+    const info = stmtInsert.run(
+      userHash, name || "", type || "image", storageUrl, thumbUrl || "", contentHash || null
+    );
+    existing = stmtGetById.get(info.lastInsertRowid);
+  }
+
+  stmtUpdateIdentity.run(
+    name || "",
+    type || "",
+    storageUrl || "",
+    thumbUrl || "",
+    contentHash || "",
+    assetId === undefined ? existing.asset_id : (assetId || null),
+    assetStatus || "",
+    existing.id,
+    userHash
+  );
+  return stmtGetById.get(existing.id);
 }
 
 const stmtUpdateStatus = db.prepare(`

@@ -16,7 +16,7 @@ import os from "os";
 import {
   hashApiKey, listAssets, findAssetByUrl, findAssetByHash, findAssetByAssetId,
   insertAsset, updateAssetStatus, updateAssetThumb, getAssetById,
-  deleteAsset as dbDeleteAsset, getPrefs, setPrefs,
+  upsertAssetIdentity, deleteAsset as dbDeleteAsset, getPrefs, setPrefs,
 } from "./db.js";
 
 const require = createRequire(import.meta.url);
@@ -33,7 +33,7 @@ app.use((req, res, next) => {
   if (origin && (origin.includes("anyfast.com.cn") || origin.includes("anyfast.ai"))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-Api-Key,X-Storage,Authorization");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-Api-Key,X-Api-Base,X-Storage,Authorization");
     if (req.method === "OPTIONS") return res.sendStatus(204);
   }
   next();
@@ -129,39 +129,31 @@ function getBase(req) {
 
 app.post("/api/generate", async (req, res) => {
   try {
-    const body = await verifyAndRehealAssetIds(req, req.body);
-    const resp = await fetch(`${getBase(req)}/v1/video/generations`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getKey(req)}`,
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await resp.json();
+    let body = await resolveVisualAssetsForGenerate(req, req.body);
+    let { resp, data } = await forwardVideoGeneration(req, body);
     if (!resp.ok) {
-      const urls = (body.content || []).map((c) => {
-        const slot = c.image_url || c.video_url || c.audio_url;
-        return slot ? `${c.type}=${slot.url}` : c.type;
-      });
-      console.warn(`[Generate] upstream ${resp.status} | urls=${JSON.stringify(urls)} | err=${JSON.stringify(data).slice(0, 800)}`);
-      // Upstream rejected an asset_id whose internal URL became invalid (e.g. cos://
-      // or empty scheme). Our process-wide cache thinks it's verified, so re-tries
-      // would skip ListAssets and hit the same wall. Drop the suspect ids from the
-      // cache so the next attempt re-verifies (and our reheal path can rebuild them).
-      const errStr = JSON.stringify(data);
-      if (errStr.includes("invalid url scheme")) {
-        let dropped = 0;
-        for (const c of (body.content || [])) {
-          const slot = c.image_url || c.video_url || c.audio_url;
-          const url = slot?.url;
-          if (typeof url === "string" && url.startsWith("asset://")) {
-            const id = url.slice("asset://".length);
-            if (_verifiedAssetIds.delete(id)) dropped++;
+      logGenerateFailure(resp, data, body);
+      if (!resp.ok && isInvalidUrlSchemeError(data)) {
+        const rejected = collectVisualAssetIds(body);
+        if (rejected.length) console.warn(`[Generate] re-creating ${rejected.length} visual asset_id(s) after scheme error`);
+        const retryBody = await resolveVisualAssetsForGenerate(req, body, { forceAssetUrls: rejected });
+        await new Promise((r) => setTimeout(r, 3000));
+        ({ resp, data } = await forwardVideoGeneration(req, retryBody));
+        if (!resp.ok) {
+          logGenerateFailure(resp, data, retryBody, " retry");
+          if (isInvalidUrlSchemeError(data)) {
+            const finalRejected = collectVisualAssetIds(retryBody);
+            const finalBody = await resolveVisualAssetsForGenerate(req, retryBody, { forceAssetUrls: finalRejected });
+            await new Promise((r) => setTimeout(r, 12000));
+            ({ resp, data } = await forwardVideoGeneration(req, finalBody));
+            body = finalBody;
+            if (!resp.ok) logGenerateFailure(resp, data, finalBody, " retry-after-wait");
           }
         }
-        if (dropped) console.warn(`[Generate] invalidated ${dropped} cached asset_id(s) after scheme error`);
       }
+    }
+    if (!resp.ok && isInvalidUrlSchemeError(data)) {
+      throw assetResolutionError(collectVisualAssetIds(body));
     }
     res.status(resp.status).json(data);
   } catch (err) {
@@ -173,6 +165,342 @@ app.post("/api/generate", async (req, res) => {
     res.status(status).json(payload);
   }
 });
+
+async function forwardVideoGeneration(req, body) {
+  const upstreamBody = normalizeAssetUrlSchemeForUpstream(body);
+  rewriteAudioAssetsToHttpForUpstream(req, upstreamBody);
+  const resp = await fetch(`${getBase(req)}/v1/video/generations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getKey(req)}`,
+    },
+    body: JSON.stringify(upstreamBody),
+  });
+  const text = await resp.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { error: text || `Upstream returned HTTP ${resp.status} with an empty response body` };
+  }
+  return { resp, data };
+}
+
+function rewriteAudioAssetsToHttpForUpstream(req, body) {
+  for (const c of (body?.content || [])) {
+    const slot = c?.audio_url;
+    if (!slot || typeof slot.url !== "string" || !isAssetUrl(slot.url)) continue;
+    const meta = getAssetRecovery(req, slot.url);
+    if (meta?.storageUrl && isHttpUrl(meta.storageUrl)) {
+      slot.url = meta.storageUrl;
+    }
+  }
+}
+
+function normalizeAssetUrlSchemeForUpstream(originalBody) {
+  const body = JSON.parse(JSON.stringify(originalBody || {}));
+  for (const c of (body.content || [])) {
+    for (const key of ["image_url", "video_url", "audio_url"]) {
+      const slot = c?.[key];
+      if (!slot || typeof slot.url !== "string") continue;
+      if (isAssetUrl(slot.url)) {
+        slot.url = toCanonicalAssetUrl(slot.url);
+      }
+    }
+  }
+  return body;
+}
+
+function logGenerateFailure(resp, data, body, label = "") {
+  const urls = (body.content || []).map((c) => {
+    const slot = c.image_url || c.video_url || c.audio_url;
+    return slot ? `${c.type}=${slot.url}` : c.type;
+  });
+  console.warn(`[Generate${label}] upstream ${resp.status} | urls=${JSON.stringify(urls)} | err=${JSON.stringify(data).slice(0, 800)}`);
+}
+
+function isInvalidUrlSchemeError(data) {
+  return JSON.stringify(data || {}).includes("invalid url scheme");
+}
+
+function isPrivacyInformationError(data) {
+  return JSON.stringify(data || {}).includes("PrivacyInformation");
+}
+
+function collectVisualAssetIds(body) {
+  const ids = [];
+  for (const c of (body?.content || [])) {
+    if (c.type !== "image_url" && c.type !== "video_url") continue;
+    const slot = c.image_url || c.video_url;
+    const url = slot?.url;
+    if (typeof url === "string" && isAssetUrl(url)) ids.push(toCanonicalAssetUrl(url));
+  }
+  return ids;
+}
+
+function assetResolutionError(assetIds) {
+  const err = new Error("素材解析失败，请重新上传对应素材后重试");
+  err.statusCode = 503;
+  err.code = "ASSET_RESOLUTION_FAILED";
+  err.assetIds = assetIds;
+  return err;
+}
+
+function getVisualSlot(contentItem) {
+  if (contentItem?.type === "image_url") return { slot: contentItem.image_url, mediaType: "image" };
+  if (contentItem?.type === "video_url") return { slot: contentItem.video_url, mediaType: "video" };
+  return { slot: null, mediaType: "" };
+}
+
+function getAudioSlot(contentItem) {
+  return contentItem?.type === "audio_url" ? contentItem.audio_url : null;
+}
+
+function cleanClientSlot(slot) {
+  if (!slot || typeof slot !== "object") return;
+  delete slot._cosUrl;
+  delete slot._name;
+  delete slot._contentHash;
+}
+
+function normalizeForceAssetSet(forceAssetUrls = []) {
+  return new Set((forceAssetUrls || [])
+    .map((u) => toCanonicalAssetUrl(u))
+    .filter(Boolean));
+}
+
+function resolveStorageUrlFromSlot(req, slot) {
+  if (!slot) return "";
+  const direct = typeof slot.url === "string" ? slot.url : "";
+  if (isHttpUrl(direct)) return direct;
+  const hinted = typeof slot._cosUrl === "string" ? slot._cosUrl : "";
+  if (isHttpUrl(hinted)) return hinted;
+  if (isAssetUrl(direct)) {
+    const meta = getAssetRecovery(req, direct);
+    if (meta?.storageUrl && isHttpUrl(meta.storageUrl)) return meta.storageUrl;
+  }
+  return "";
+}
+
+async function resolveVisualAssetFromStorage(req, slot, mediaType, { force = false } = {}) {
+  const userHash = getUserHash(req);
+  const originalStorageUrl = resolveStorageUrlFromSlot(req, slot);
+  if (!isHttpUrl(originalStorageUrl)) {
+    const err = new Error("素材缺少可恢复的 URL，请重新上传后重试");
+    err.statusCode = 422;
+    err.code = "ASSET_STORAGE_MISSING";
+    throw err;
+  }
+
+  const hintedHash = normalizeContentHash(slot?._contentHash);
+  const originalHash = hintedHash || deriveContentHashFromStorageUrl(originalStorageUrl);
+  const storageUrl = await mirrorCosAssetToTosIfNeeded(req, originalStorageUrl, originalHash);
+  const contentHash = originalHash || deriveContentHashFromStorageUrl(storageUrl);
+  const name = (typeof slot?._name === "string" && slot._name) ? slot._name : deriveNameFromUrl(storageUrl);
+
+  let asset = (contentHash ? findAssetByHash(userHash, contentHash) : null)
+    || findAssetByUrl(userHash, storageUrl)
+    || (storageUrl !== originalStorageUrl ? findAssetByUrl(userHash, originalStorageUrl) : null);
+
+  if (asset && asset.storage_url !== storageUrl) {
+    asset = upsertKnownAsset({
+      userHash,
+      name: asset.name || name,
+      type: asset.type || mediaType,
+      storageUrl,
+      thumbUrl: asset.thumb_url || "",
+      contentHash: asset.content_hash || contentHash,
+      assetId: "",
+      assetStatus: "none",
+    }) || asset;
+  }
+
+  if (!asset) {
+    asset = insertAsset({ userHash, name, type: mediaType, storageUrl, thumbUrl: "", contentHash });
+  } else {
+    asset = upsertKnownAsset({
+      userHash,
+      name: asset.name || name,
+      type: asset.type || mediaType,
+      storageUrl,
+      contentHash: asset.content_hash || contentHash,
+    }) || asset;
+  }
+
+  if (!force && asset.asset_status === "ready" && asset.asset_id) {
+    rememberAssetRecovery(asset.asset_id, {
+      storageUrl: asset.storage_url || storageUrl,
+      name: asset.name || name,
+      type: asset.type || mediaType,
+      contentHash: asset.content_hash || contentHash,
+    });
+    return asset.asset_id;
+  }
+
+  const result = await whitelistLocalAsset(req, userHash, asset, {
+    force,
+    name: asset.name || name,
+    type: asset.type || mediaType,
+  });
+  if (result.error) {
+    const err = new Error(result.error);
+    err.statusCode = 422;
+    err.code = "ASSET_WHITELIST_FAILED";
+    throw err;
+  }
+  if (!result.asset?.asset_id) {
+    const err = new Error("素材加白未返回 asset_id，请重新上传后重试");
+    err.statusCode = 422;
+    err.code = "ASSET_ID_MISSING";
+    throw err;
+  }
+
+  rememberAssetRecovery(result.asset.asset_id, {
+    storageUrl: result.asset.storage_url || storageUrl,
+    name: result.asset.name || name,
+    type: result.asset.type || mediaType,
+    contentHash: result.asset.content_hash || contentHash,
+  });
+  return result.asset.asset_id;
+}
+
+async function resolveVisualAssetsForGenerate(req, originalBody, { forceAssetUrls = [] } = {}) {
+  const body = JSON.parse(JSON.stringify(originalBody || {}));
+  const force = normalizeForceAssetSet(forceAssetUrls);
+  const cache = new Map();
+  let converted = 0;
+
+  for (const c of (body.content || [])) {
+    const { slot, mediaType } = getVisualSlot(c);
+    if (slot) {
+      const currentAssetUrl = isAssetUrl(slot.url) ? toCanonicalAssetUrl(slot.url) : "";
+      const storageUrl = resolveStorageUrlFromSlot(req, slot);
+      const cacheKey = `${mediaType}:${normalizeContentHash(slot._contentHash)}:${storageUrl || currentAssetUrl}`;
+      let assetUrl = cache.get(cacheKey);
+      if (!assetUrl) {
+        assetUrl = await resolveVisualAssetFromStorage(req, slot, mediaType, {
+          force: currentAssetUrl ? force.has(currentAssetUrl) : false,
+        });
+        cache.set(cacheKey, assetUrl);
+      }
+      slot.url = toCanonicalAssetUrl(assetUrl);
+      cleanClientSlot(slot);
+      converted++;
+      continue;
+    }
+
+    const audioSlot = getAudioSlot(c);
+    if (audioSlot) {
+      const storageUrl = resolveStorageUrlFromSlot(req, audioSlot);
+      if (storageUrl) audioSlot.url = storageUrl;
+      cleanClientSlot(audioSlot);
+    }
+  }
+
+  if (converted) console.warn(`[Generate] resolved ${converted} visual URL(s) to asset://`);
+  return body;
+}
+
+function isHttpUrl(url) {
+  return typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"));
+}
+
+function isAssetUrl(url) {
+  return typeof url === "string" && /^asset:\/\//i.test(url);
+}
+
+function assetIdFromUrl(url) {
+  return isAssetUrl(url) ? url.slice("asset://".length) : "";
+}
+
+function toCanonicalAssetUrl(url) {
+  const id = assetIdFromUrl(url);
+  return id ? "asset://" + id : "";
+}
+
+function normalizeContentHash(contentHash) {
+  return typeof contentHash === "string" && /^[a-f0-9]{32,128}$/i.test(contentHash)
+    ? contentHash.toLowerCase()
+    : "";
+}
+
+function deriveContentHashFromStorageUrl(storageUrl) {
+  if (!isHttpUrl(storageUrl)) return "";
+  try {
+    const raw = new URL(storageUrl).pathname.split("/").filter(Boolean).pop() || "";
+    const base = decodeURIComponent(raw).split("?")[0].split("#")[0].split(".")[0] || "";
+    return normalizeContentHash(base);
+  } catch {
+    return "";
+  }
+}
+
+function normalizeAssetMeta(meta) {
+  const { userHash, name, type, storageUrl, thumbUrl, contentHash, assetUrl, assetId, assetStatus } = meta;
+  const hasAssetId = Object.prototype.hasOwnProperty.call(meta, "assetUrl")
+    || Object.prototype.hasOwnProperty.call(meta, "assetId");
+  const canonicalAssetUrl = assetUrl ? toCanonicalAssetUrl(assetUrl) : (assetId ? toCanonicalAssetUrl("asset://" + assetId) : "");
+  const normalizedHash = normalizeContentHash(contentHash) || deriveContentHashFromStorageUrl(storageUrl);
+  return {
+    userHash,
+    name: name || (storageUrl ? deriveNameFromUrl(storageUrl) : ""),
+    type: type || "image",
+    storageUrl: isHttpUrl(storageUrl) ? storageUrl : "",
+    thumbUrl: thumbUrl || "",
+    contentHash: normalizedHash,
+    assetId: hasAssetId ? canonicalAssetUrl : undefined,
+    assetStatus: assetStatus || (canonicalAssetUrl ? "ready" : ""),
+  };
+}
+
+function upsertKnownAsset(meta) {
+  const normalized = normalizeAssetMeta(meta);
+  if (!normalized.userHash || !normalized.storageUrl) return null;
+  const row = upsertAssetIdentity(normalized);
+  if (row?.asset_id && row?.storage_url) {
+    rememberAssetRecovery(row.asset_id, {
+      storageUrl: row.storage_url,
+      name: row.name || normalized.name,
+      type: row.type || normalized.type,
+      contentHash: row.content_hash || normalized.contentHash,
+    });
+  }
+  return row;
+}
+
+function rememberAssetRecovery(assetUrl, meta) {
+  assetUrl = toCanonicalAssetUrl(assetUrl);
+  if (!assetUrl) return;
+  const storageUrl = meta?.storageUrl || meta?.storage_url || "";
+  if (!isHttpUrl(storageUrl)) return;
+  _assetRecoveryByAssetUrl.set(assetUrl, {
+    storageUrl,
+    name: meta.name || "",
+    type: meta.type || "image",
+    contentHash: meta.contentHash || meta.content_hash || "",
+  });
+}
+
+function getAssetRecovery(req, assetUrl) {
+  assetUrl = toCanonicalAssetUrl(assetUrl);
+  const cached = _assetRecoveryByAssetUrl.get(assetUrl);
+  if (cached?.storageUrl) return cached;
+  try {
+    const local = findAssetByAssetId(getUserHash(req), assetUrl);
+    if (local?.storage_url) {
+      const meta = {
+        storageUrl: local.storage_url,
+        name: local.name || "",
+        type: local.type || "image",
+        contentHash: local.content_hash || "",
+      };
+      rememberAssetRecovery(assetUrl, meta);
+      return meta;
+    }
+  } catch {}
+  return null;
+}
 
 app.get("/api/status/:id", async (req, res) => {
   try {
@@ -216,13 +544,71 @@ const TOS_ORIGINS = ["anyfast.com.cn"];
 function isTosOrigin(req) {
   const origin = req.headers.origin || "";
   const referer = req.headers.referer || "";
+  const apiBase = req.headers["x-api-base"] || "";
   return TOS_ORIGINS.some(h => origin.includes(h) || referer.includes(h))
+    || TOS_ORIGINS.some(h => typeof apiBase === "string" && decodeURI(apiBase).includes(h))
     || req.body?.storage === "tos" || req.query?.storage === "tos" || req.headers["x-storage"] === "tos";
+}
+
+function isCosStorageUrl(url) {
+  return typeof url === "string" && url.startsWith(COS_BASE_URL + "/");
+}
+
+function isTosStorageUrl(url) {
+  return typeof url === "string" && url.includes(`://${TOS_PUBLIC_HOST}/`);
+}
+
+function shouldMirrorCosToTos(req, storageUrl) {
+  return isTosOrigin(req) && isCosStorageUrl(storageUrl) && !isTosStorageUrl(storageUrl);
+}
+
+async function uploadBufferToTos(key, contentType, body) {
+  if (!TOS_AK || !TOS_SK) throw new Error("TOS not configured");
+  const presign = tosPresignPut(key, contentType || "application/octet-stream");
+  const upResp = await fetch(presign.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType || "application/octet-stream" },
+    body,
+  });
+  if (!upResp.ok) throw new Error(`TOS upload failed: ${upResp.status}`);
+  return presign.fileUrl;
+}
+
+async function mirrorCosAssetToTosIfNeeded(req, storageUrl, contentHash = "") {
+  if (!shouldMirrorCosToTos(req, storageUrl)) return storageUrl;
+  const hash = normalizeContentHash(contentHash) || deriveContentHashFromStorageUrl(storageUrl);
+  const ext = (() => {
+    try {
+      const last = new URL(storageUrl).pathname.split("/").filter(Boolean).pop() || "";
+      const m = last.match(/\.([a-zA-Z0-9]+)$/);
+      return (m?.[1] || "bin").toLowerCase();
+    } catch {
+      return "bin";
+    }
+  })();
+  if (hash) {
+    const existing = findAssetByHash(getUserHash(req), hash);
+    if (existing?.storage_url && isTosStorageUrl(existing.storage_url)) return existing.storage_url;
+  }
+  const source = await fetch(storageUrl);
+  if (!source.ok) throw new Error(`Failed to mirror COS asset to TOS: source ${source.status}`);
+  const bytes = Buffer.from(await source.arrayBuffer());
+  const finalHash = hash || crypto.createHash("sha256").update(bytes).digest("hex");
+  const contentType = source.headers.get("content-type") || "application/octet-stream";
+  const key = `assets/${finalHash}.${ext}`;
+  const fileUrl = await uploadBufferToTos(key, contentType, bytes);
+  console.warn(`[StorageMirror] mirrored COS asset to TOS for zh base: ${storageUrl.slice(0, 90)} -> ${fileUrl}`);
+  return fileUrl;
 }
 
 // Get presigned upload URL — auto-routes COS or TOS based on origin
 app.post("/api/presign", (req, res, next) => { req.url = "/api/cos/presign"; next(); });
 app.post("/api/cos/presign", (req, res) => {
+  try {
+    getKey(req);
+  } catch (err) {
+    return res.status(401).json({ error: err.message });
+  }
   const { filename, contentType, prefix, key: clientKey } = req.body;
   if (!filename || !contentType) {
     return res.status(400).json({ error: "filename and contentType required" });
@@ -278,6 +664,13 @@ mkdirSync(tmpDir, { recursive: true });
 
 const upload = multer({ dest: tmpDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
+// Content-addressed key under assets/. Same content -> same key, so repeated
+// uploads dedupe and the storage URL remains stable for the asset library.
+function hashFileKey(filePath, ext) {
+  const hash = crypto.createHash("sha256").update(readFileSync(filePath)).digest("hex");
+  return `assets/${hash}.${ext}`;
+}
+
 async function probeVideo(filePath) {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "quiet",
@@ -295,6 +688,12 @@ async function probeVideo(filePath) {
 }
 
 app.post("/api/upload/video", upload.single("file"), async (req, res) => {
+  try {
+    getKey(req);
+  } catch (err) {
+    if (req.file?.path) try { unlinkSync(req.file.path); } catch {}
+    return res.status(401).json({ error: err.message });
+  }
   if (!req.file) return res.status(400).json({ error: "No file provided" });
 
   const inputPath = req.file.path;
@@ -329,7 +728,7 @@ app.post("/api/upload/video", upload.single("file"), async (req, res) => {
 
     // Upload to COS or TOS
     const useTos = isTosOrigin(req);
-    const storageKey = `uploads/${Date.now()}_${outName}`;
+    const storageKey = hashFileKey(outputPath, "mp4");
     let fileUrl;
     if (useTos && TOS_AK && TOS_SK) {
       const presign = tosPresignPut(storageKey, "video/mp4");
@@ -396,6 +795,12 @@ function tosPresignPut(key, contentType, expires = 600) {
 
 // Generic file upload — supports COS (default) and TOS (X-Storage: tos)
 app.post("/api/upload/file", upload.single("file"), async (req, res) => {
+  try {
+    getKey(req);
+  } catch (err) {
+    if (req.file?.path) try { unlinkSync(req.file.path); } catch {}
+    return res.status(401).json({ error: err.message });
+  }
   if (!req.file) return res.status(400).json({ error: "No file provided" });
   const useTos = req.body?.storage === "tos" || req.query?.storage === "tos" || req.headers["x-storage"] === "tos";
   try {
@@ -403,7 +808,7 @@ app.post("/api/upload/file", upload.single("file"), async (req, res) => {
     if (useTos) {
       if (!TOS_AK || !TOS_SK) throw new Error("TOS not configured");
       const ext = (req.file.originalname || "bin").split(".").pop() || "bin";
-      const key = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const key = hashFileKey(req.file.path, ext);
       const presign = tosPresignPut(key, req.file.mimetype);
       const body = readFileSync(req.file.path);
       const upResp = await fetch(presign.uploadUrl, { method: "PUT", headers: { "Content-Type": req.file.mimetype }, body });
@@ -411,7 +816,7 @@ app.post("/api/upload/file", upload.single("file"), async (req, res) => {
       fileUrl = presign.fileUrl;
     } else {
       const ext = (req.file.originalname || "bin").split(".").pop() || "bin";
-      const cosKey = `uploads/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const cosKey = hashFileKey(req.file.path, ext);
       await new Promise((resolve, reject) => {
         cos.putObject({ Bucket: COS_BUCKET, Region: COS_REGION, Key: cosKey, Body: createReadStream(req.file.path), ContentType: req.file.mimetype }, (err) => err ? reject(err) : resolve());
       });
@@ -426,8 +831,16 @@ app.post("/api/upload/file", upload.single("file"), async (req, res) => {
   }
 });
 
-// TOS presign — browser uploads directly to TOS
+// TOS presign - browser uploads directly to TOS.
+// Server has no file bytes here, so we can't compute a content hash. Prefer
+// /api/cos/presign with a deterministic key (eg assets/{sha256}.{ext}) when
+// the caller needs the URL to dedupe against the asset library.
 app.post("/api/tos/presign", (req, res) => {
+  try {
+    getKey(req);
+  } catch (err) {
+    return res.status(401).json({ error: err.message });
+  }
   const { filename, contentType } = req.body;
   if (!filename || !contentType) return res.status(400).json({ error: "filename and contentType required" });
   if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
@@ -444,6 +857,12 @@ app.post("/api/tos/presign", (req, res) => {
 
 // TOS video upload — ffmpeg + upload to TOS
 app.post("/api/tos/upload-video", upload.single("file"), async (req, res) => {
+  try {
+    getKey(req);
+  } catch (err) {
+    if (req.file?.path) try { unlinkSync(req.file.path); } catch {}
+    return res.status(401).json({ error: err.message });
+  }
   if (!req.file) return res.status(400).json({ error: "No file provided" });
   if (!TOS_AK || !TOS_SK) return res.status(500).json({ error: "TOS not configured" });
   const inputPath = req.file.path;
@@ -467,7 +886,7 @@ app.post("/api/tos/upload-video", upload.single("file"), async (req, res) => {
     ffArgs.push("-c:a", "aac", "-b:a", "128k");
     ffArgs.push(outputPath);
     await execFileAsync("ffmpeg", ffArgs, { timeout: 120000 });
-    const storageKey = `uploads/${Date.now()}_${outName}`;
+    const storageKey = hashFileKey(outputPath, "mp4");
     const presign = tosPresignPut(storageKey, "video/mp4");
     const body = readFileSync(outputPath);
     const upResp = await fetch(presign.uploadUrl, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body });
@@ -600,15 +1019,145 @@ async function serverEnsureAssetGroup(req) {
   }
 }
 
-// Proxy does not implement GetAsset. Use ListAssets with Filter.Ids instead;
-// note GroupType is required by upstream Volc schema.
-async function pollAssetStatus(req, assetId) {
-  const list = await volcAssetCall(req, "ListAssets", {
-    Filter: { Ids: [assetId], GroupType: "AIGC" },
-    PageNumber: 1, PageSize: 5,
+// Shared batched poller. Many serverCreateAsset calls can run in parallel
+// (eg user submits 10 images at once); each used to do its own ListAssets every
+// 2s, so 10 parallel CreateAssets = 300 ListAssets calls in 60s. Now we group
+// pending ids by (base, key) and run ONE ListAssets per tick that covers every
+// id the group is waiting on. Same total wall time, ~10× fewer upstream calls.
+//
+// Each group entry: { req, pending: Map<assetId, {resolve,reject,deadline}>, ticker, busy }
+const _pollGroups = new Map();
+const POLL_INTERVAL_MS = 3000;
+
+function poolKey(req) { return getBase(req) + "|" + getKey(req); }
+
+async function listAssetsByIds(req, ids, { scanIfMissing = false, logPrefix = "ListAssets" } = {}) {
+  const wanted = new Set((ids || []).filter(Boolean));
+  const found = new Map();
+  if (wanted.size === 0) return found;
+
+  const addRequested = (items) => {
+    let unrelated = 0;
+    for (const item of items || []) {
+      if (!item?.Id || !wanted.has(item.Id)) {
+        if (item?.Id) unrelated++;
+        continue;
+      }
+      found.set(item.Id, item);
+    }
+    return unrelated;
+  };
+
+  const first = await volcAssetCall(req, "ListAssets", {
+    Filter: { Ids: [...wanted], GroupType: "AIGC" },
+    PageNumber: 1, PageSize: Math.max(wanted.size, 10),
   });
-  const item = (list.Items || []).find((a) => a.Id === assetId);
-  return item || null;
+  const unrelated = addRequested(first.Items || []);
+
+  if (!scanIfMissing || found.size === wanted.size) return found;
+
+  const missing = () => [...wanted].filter((id) => !found.has(id));
+  console.warn(`[${logPrefix}] Filter.Ids returned ${found.size}/${wanted.size} requested id(s)${unrelated ? ` plus ${unrelated} unrequested` : ""}; scanning groups for missing id(s)`);
+
+  const groupList = await volcAssetCall(req, "ListAssetGroups", {
+    Filter: { GroupType: "AIGC" }, PageNumber: 1, PageSize: 100,
+  });
+  const groups = (groupList.Items || []).filter((g) => g.Id && !g.Name?.startsWith("__del__"));
+  for (const g of groups) {
+    if (missing().length === 0) break;
+    let page = 1;
+    const pageSize = 100;
+    while (page <= 50) {
+      const list = await volcAssetCall(req, "ListAssets", {
+        Filter: { GroupIds: [g.Id], GroupType: "AIGC" },
+        PageNumber: page, PageSize: pageSize,
+      });
+      addRequested(list.Items || []);
+      if (missing().length === 0 || (list.Items || []).length < pageSize) break;
+      page++;
+    }
+  }
+  return found;
+}
+
+async function runPollTick(key) {
+  const group = _pollGroups.get(key);
+  if (!group || group.busy) return;
+  group.busy = true;
+  try {
+    // Drop any deadlines that have expired.
+    const now = Date.now();
+    for (const [id, w] of [...group.pending]) {
+      if (now >= w.deadline) {
+        group.pending.delete(id);
+        w.reject(new Error("Asset whitelisting timeout (120s)"));
+      }
+    }
+    if (group.pending.size === 0) return;
+    const ids = [...group.pending.keys()];
+    let items = [];
+    try {
+      const byId = await listAssetsByIds(group.req, ids, { scanIfMissing: true, logPrefix: "PollGroup" });
+      items = [...byId.values()];
+    } catch (e) {
+      console.warn(`[PollGroup] ListAssets error for ${ids.length} id(s):`, e.message);
+      return; // try again next tick
+    }
+    const seen = new Set();
+    for (const item of items) {
+      if (!item.Id || !group.pending.has(item.Id)) continue;
+      seen.add(item.Id);
+      const status = item.Status;
+      const itemUrl = typeof item.URL === "string" ? item.URL : "";
+      const urlOk = itemUrl.startsWith("https://") || itemUrl.startsWith("http://");
+      console.log(`[Asset ${item.Id}] Status: ${status}${status === "Active" && !urlOk ? " (URL not ready)" : ""}`);
+      if (status === "Active" && urlOk) {
+        const w = group.pending.get(item.Id);
+        group.pending.delete(item.Id);
+        w.resolve(item.Id);
+      } else if (status === "Failed" || status === "failed") {
+        const w = group.pending.get(item.Id);
+        group.pending.delete(item.Id);
+        w.reject(new Error("Asset whitelisting failed: " + (item.FailReason || "unknown")));
+      }
+      // else (Active no URL, Processing): keep waiting
+    }
+    for (const id of ids) {
+      if (!seen.has(id)) {
+        console.log(`[Asset ${id}] not visible yet via ListAssets, retrying`);
+      }
+    }
+  } finally {
+    group.busy = false;
+    if (group.pending.size === 0 && group.ticker) {
+      clearInterval(group.ticker);
+      group.ticker = null;
+      _pollGroups.delete(key);
+    }
+  }
+}
+
+// Wait for a single asset to reach Active+urlOk via the shared batch poller.
+function awaitAssetActive(req, assetId) {
+  const key = poolKey(req);
+  let group = _pollGroups.get(key);
+  if (!group) {
+    group = { req, pending: new Map(), ticker: null, busy: false };
+    _pollGroups.set(key, group);
+  } else {
+    // Refresh req: token rotation etc shouldn't matter for ListAssets,
+    // but keep the most recent valid req object as the canonical one.
+    group.req = req;
+  }
+  return new Promise((resolve, reject) => {
+    group.pending.set(assetId, { resolve, reject, deadline: Date.now() + 120000 });
+    if (!group.ticker) {
+      group.ticker = setInterval(() => { runPollTick(key); }, POLL_INTERVAL_MS);
+      // Kick off an immediate first tick after a small delay so the asset has
+      // a moment to land in upstream's index before we ask.
+      setTimeout(() => runPollTick(key), 1500);
+    }
+  });
 }
 
 async function serverCreateAsset(req, url, name, assetType = "Image") {
@@ -625,146 +1174,10 @@ async function serverCreateAsset(req, url, name, assetType = "Image") {
   const cacheKey = getBase(req) + "|" + getKey(req);
   const entry = _groupCache.get(cacheKey);
   if (entry) entry.count++;
-  const assetId = result.Id;
-  // Poll ListAssets until Active (or Failed) — max 60s
-  const deadline = Date.now() + 60000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 2000));
-    try {
-      const item = await pollAssetStatus(req, assetId);
-      if (!item) {
-        console.log(`[Asset ${assetId}] not visible yet via ListAssets, retrying`);
-        continue;
-      }
-      const status = item.Status;
-      console.log(`[Asset ${assetId}] Status: ${status}`);
-      if (status === "Active") return assetId;
-      if (status === "Failed" || status === "failed") {
-        throw new Error("Asset whitelisting failed: " + (item.FailReason || "unknown"));
-      }
-    } catch (e) {
-      if (e.message?.includes("Asset whitelisting failed")) throw e;
-      console.warn(`[Asset ${assetId}] Poll error:`, e.message);
-    }
-  }
-  throw new Error("Asset whitelisting timeout (60s)");
+  return await awaitAssetActive(req, result.Id);
 }
 
-// Process-wide cache of asset_ids we've already confirmed exist upstream.
-// Once an id is in here we never re-verify it for the lifetime of this process.
-// Restarting the server forces re-verification, which is cheap and acceptable.
-const _verifiedAssetIds = new Set();
-
-// Walk a generate-body content array and yield every asset:// URL with a setter to swap it.
-function* walkAssetUrls(body) {
-  if (!body || !Array.isArray(body.content)) return;
-  for (const c of body.content) {
-    for (const key of ["image_url", "video_url", "audio_url"]) {
-      const slot = c?.[key];
-      if (slot && typeof slot.url === "string" && slot.url.startsWith("asset://")) {
-        yield {
-          url: slot.url,
-          set: (newUrl) => { slot.url = newUrl; },
-        };
-      }
-    }
-  }
-}
-
-// Before forwarding to /v1/video/generations, make sure every asset:// id in the
-// body is actually live upstream. Volc CreateAsset can return Active for an id
-// that later vanishes / fails moderation, which makes the generation request
-// blow up with input-image-sensitive style errors. We list the ids, downgrade
-// any missing ones in our DB, re-create them via the normal whitelist flow,
-// and rewrite the body with the new ids.
-//
-// The result is cached in _verifiedAssetIds so a given id is only ever checked once.
-async function verifyAndRehealAssetIds(req, originalBody) {
-  // Deep-clone shallowly enough that we can mutate slot.url via walkAssetUrls.
-  const body = JSON.parse(JSON.stringify(originalBody || {}));
-  const slots = [...walkAssetUrls(body)];
-  if (slots.length === 0) return body;
-
-  // Volc id is the part after "asset://". Group slots by id (same id can appear twice).
-  const idToSlots = new Map();
-  for (const s of slots) {
-    const id = s.url.slice("asset://".length);
-    if (!id) continue;
-    if (!idToSlots.has(id)) idToSlots.set(id, []);
-    idToSlots.get(id).push(s);
-  }
-
-  const idsToCheck = [...idToSlots.keys()].filter((id) => !_verifiedAssetIds.has(id));
-  if (idsToCheck.length === 0) return body;
-
-  // Filter.Ids is the upstream-supported lookup. PageSize covers all ids we asked about.
-  let liveIds = new Set();
-  try {
-    const list = await volcAssetCall(req, "ListAssets", {
-      Filter: { Ids: idsToCheck, GroupType: "AIGC" },
-      PageNumber: 1, PageSize: Math.max(idsToCheck.length, 10),
-    });
-    for (const item of list.Items || []) {
-      // Active alone isn't enough — upstream sometimes reports Active for an asset
-      // whose stored URL is missing or has an invalid scheme (e.g. 'cos://...' or
-      // a bare host). Submitting that asset_id later trips the upstream guardrail
-      // with "invalid url scheme". Treat such assets as missing so we re-create.
-      const url = typeof item.URL === "string" ? item.URL : "";
-      const urlOk = url.startsWith("https://") || url.startsWith("http://");
-      if (item.Status === "Active" && item.Id && urlOk) liveIds.add(item.Id);
-      else if (item.Id) console.warn(`[VerifyAssets] upstream ${item.Id} unhealthy: status=${item.Status} url=${url.slice(0, 80)}`);
-    }
-  } catch (e) {
-    // If the verify call itself fails we proceed optimistically — the upstream
-    // generate call will surface the real error and PrivacyInformation retry
-    // can still rescue it. Don't let one flaky request block submission.
-    console.warn("[VerifyAssets] ListAssets check failed:", e.message);
-    return body;
-  }
-
-  const userHash = getUserHash(req);
-  const orphans = [];
-  for (const id of idsToCheck) {
-    if (liveIds.has(id)) {
-      _verifiedAssetIds.add(id);
-      continue;
-    }
-    // Missing upstream — downgrade local row and re-whitelist with the same storage_url.
-    const oldAssetUrl = "asset://" + id;
-    const local = findAssetByAssetId(userHash, oldAssetUrl);
-    if (!local || !local.storage_url) {
-      // No local record AND no live upstream — orphan. Submitting would trip
-      // "invalid url scheme". Surface it so the user can re-insert the asset.
-      console.warn(`[VerifyAssets] ${id} missing upstream + no local row to re-create`);
-      orphans.push(oldAssetUrl);
-      continue;
-    }
-    console.log(`[VerifyAssets] ${id} missing upstream, re-creating from ${local.storage_url}`);
-    updateAssetStatus(local.id, userHash, { assetId: null, assetStatus: "pending" });
-    try {
-      const assetType = local.type === "video" ? "Video" : local.type === "audio" ? "Audio" : "Image";
-      const newVolcId = await serverCreateAsset(req, local.storage_url, local.name, assetType);
-      const newAssetUrl = "asset://" + newVolcId;
-      updateAssetStatus(local.id, userHash, { assetId: newAssetUrl, assetStatus: "ready" });
-      _verifiedAssetIds.add(newVolcId);
-      for (const s of idToSlots.get(id)) s.set(newAssetUrl);
-      console.log(`[VerifyAssets] ${id} → ${newAssetUrl}`);
-    } catch (e) {
-      console.warn(`[VerifyAssets] Re-create failed for ${id}:`, e.message);
-      updateAssetStatus(local.id, userHash, { assetId: null, assetStatus: "failed" });
-      // Fall back to raw storage_url so PrivacyInformation auto-retry can pick it up.
-      for (const s of idToSlots.get(id)) s.set(local.storage_url);
-    }
-  }
-  if (orphans.length) {
-    const err = new Error(`Asset(s) no longer recoverable: ${orphans.join(", ")}. Please re-insert from your library or re-upload.`);
-    err.statusCode = 422;
-    err.code = "ASSETS_UNRECOVERABLE";
-    err.assetIds = orphans;
-    throw err;
-  }
-  return body;
-}
+const _assetRecoveryByAssetUrl = new Map();
 
 // ── Asset Library API ──
 function getUserHash(req) {
@@ -801,6 +1214,62 @@ function verifyThumb(token, userHash, assetId) {
 function decorateWithThumbToken(assets, userHash) {
   const exp = Math.floor(Date.now() / 1000) + THUMB_TOKEN_TTL_SECONDS;
   return assets.map((a) => ({ ...a, thumb_token: signThumb(userHash, a.id, exp) }));
+}
+
+// Coalesce all whitelist attempts for the same local asset row. Without this,
+// the compose uploader's auto-register path and the generate-time reconcile path
+// can both call CreateAsset for the same permanent storage URL.
+const _localWhitelistLocks = new Map();
+
+async function whitelistLocalAsset(req, userHash, asset, { force = false, name, type } = {}) {
+  const lockKey = `${userHash}:${asset.id}`;
+  if (!force) {
+    const current = getAssetById(asset.id) || asset;
+    if (current.asset_status === "ready" && current.asset_id && !shouldMirrorCosToTos(req, current.storage_url)) {
+      return { asset: current };
+    }
+    const existingLock = _localWhitelistLocks.get(lockKey);
+    if (existingLock) return await existingLock;
+  }
+
+  const pending = (async () => {
+    let current = getAssetById(asset.id) || asset;
+    if (!force && current.asset_status === "ready" && current.asset_id && !shouldMirrorCosToTos(req, current.storage_url)) {
+      return { asset: current };
+    }
+    updateAssetStatus(current.id, userHash, { assetId: null, assetStatus: "pending" });
+    try {
+      const mediaType = type || current.type || "image";
+      const assetType = mediaType === "video" ? "Video" : mediaType === "audio" ? "Audio" : "Image";
+      const mirroredUrl = await mirrorCosAssetToTosIfNeeded(req, current.storage_url, current.content_hash);
+      if (mirroredUrl !== current.storage_url) {
+        current = upsertKnownAsset({
+          userHash,
+          name: name || current.name,
+          type: mediaType,
+          storageUrl: mirroredUrl,
+          thumbUrl: current.thumb_url || "",
+          contentHash: current.content_hash || deriveContentHashFromStorageUrl(current.storage_url),
+          assetId: "",
+          assetStatus: "pending",
+        }) || current;
+      }
+      const volcId = await serverCreateAsset(req, current.storage_url, name || current.name, assetType);
+      const updated = updateAssetStatus(current.id, userHash, {
+        assetId: "asset://" + volcId,
+        assetStatus: "ready",
+      });
+      return { asset: updated };
+    } catch (e) {
+      const failed = updateAssetStatus(current.id, userHash, { assetId: null, assetStatus: "failed" });
+      return { asset: failed, error: e.message };
+    }
+  })().finally(() => {
+    if (_localWhitelistLocks.get(lockKey) === pending) _localWhitelistLocks.delete(lockKey);
+  });
+
+  _localWhitelistLocks.set(lockKey, pending);
+  return await pending;
 }
 
 // List user's assets
@@ -931,6 +1400,7 @@ app.get("/api/assets/sync", async (req, res) => {
     });
     const groups = (groupList.Items || []).filter((g) => !g.Name?.startsWith("__del__"));
     const upstreamByUrl = new Map();
+    const upstreamByHash = new Map();
     for (const g of groups) {
       let page = 1;
       const pageSize = 100;
@@ -943,6 +1413,8 @@ app.get("/api/assets/sync", async (req, res) => {
         for (const item of items) {
           if (item.Status === "Active" && item.URL && item.Id) {
             upstreamByUrl.set(item.URL, item.Id);
+            const hash = deriveContentHashFromStorageUrl(item.URL);
+            if (hash) upstreamByHash.set(hash, item.Id);
           }
         }
         if (items.length < pageSize) break;
@@ -959,7 +1431,16 @@ app.get("/api/assets/sync", async (req, res) => {
       updateAssetStatus(local.id, userHash, { assetId: targetAssetId, assetStatus: "ready" });
       reconciled++;
     }
-    console.log(`[AssetSync] Upstream=${upstreamByUrl.size} reconciled=${reconciled}`);
+    for (const local of listAssets(userHash)) {
+      if (!local.content_hash) continue;
+      const volcId = upstreamByHash.get(local.content_hash);
+      if (!volcId) continue;
+      const targetAssetId = "asset://" + volcId;
+      if (local.asset_status === "ready" && local.asset_id === targetAssetId) continue;
+      updateAssetStatus(local.id, userHash, { assetId: targetAssetId, assetStatus: "ready" });
+      reconciled++;
+    }
+    console.log(`[AssetSync] Upstream=${upstreamByUrl.size} hashHints=${upstreamByHash.size} reconciled=${reconciled}`);
     res.json({
       assets: decorateWithThumbToken(listAssets(userHash), userHash),
       reconciled, upstreamCount: upstreamByUrl.size,
@@ -972,27 +1453,63 @@ app.get("/api/assets/sync", async (req, res) => {
   }
 });
 
-// Register a new asset
-app.post("/api/assets", (req, res) => {
+// Register a new asset and proactively whitelist it so the asset_id is ready
+// before the user ever submits generate. Once an asset has an asset_id in DB
+// we never re-create it — generate flow just reuses what's stored. The whitelist
+// step runs in the request lifetime so the response carries the final asset_id
+// when the call succeeds; if it fails we return the row as 'none' and the
+// user can retry from the asset library button.
+app.post("/api/assets", async (req, res) => {
   try {
     const userHash = getUserHash(req);
-    const { name, type, storageUrl, thumbUrl, contentHash } = req.body;
+    const { name, type, thumbUrl, contentHash } = req.body;
+    let { storageUrl } = req.body;
     if (!storageUrl) return res.status(400).json({ error: "storageUrl required" });
-    const asset = insertAsset({ userHash, name, type, storageUrl, thumbUrl, contentHash });
-    res.json({ asset });
+    storageUrl = await mirrorCosAssetToTosIfNeeded(req, storageUrl, contentHash);
+    const asset = upsertKnownAsset({
+      userHash,
+      name,
+      type,
+      storageUrl,
+      thumbUrl,
+      contentHash,
+    }) || insertAsset({ userHash, name, type, storageUrl, thumbUrl, contentHash });
+
+    // If the row came back from dedup already in 'ready' state, return as-is
+    // unless a zh request is carrying a legacy COS-backed row that needs a
+    // TOS asset id instead.
+    if (asset.asset_status === "ready" && asset.asset_id && !shouldMirrorCosToTos(req, asset.storage_url)) {
+      return res.json({ asset });
+    }
+    const result = await whitelistLocalAsset(req, userHash, asset, { name, type });
+    if (result.error) {
+      console.warn(`[Whitelist] Asset ${asset.id} auto-whitelist failed:`, result.error);
+      return res.json({ asset: result.asset, whitelistError: result.error });
+    }
+    console.log(`[Whitelist] Asset ${asset.id} ready (auto): ${result.asset.asset_id}`);
+    return res.json({ asset: result.asset });
   } catch (err) {
     res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
   }
 });
 
 // Lookup asset by content hash (for dedup before upload)
-app.get("/api/assets/by-hash/:hash", (req, res) => {
+app.get("/api/assets/by-hash/:hash", async (req, res) => {
   try {
     const userHash = getUserHash(req);
-    const asset = findAssetByHash(userHash, req.params.hash);
-    // Treat stale uploads/ URLs as invalid (daily cleanup wipes them)
-    if (asset && asset.storage_url && asset.storage_url.includes("/uploads/")) {
-      return res.json({ asset: null });
+    let asset = findAssetByHash(userHash, req.params.hash);
+    if (asset && shouldMirrorCosToTos(req, asset.storage_url)) {
+      const storageUrl = await mirrorCosAssetToTosIfNeeded(req, asset.storage_url, asset.content_hash || req.params.hash);
+      asset = upsertKnownAsset({
+        userHash,
+        name: asset.name || "",
+        type: asset.type || "image",
+        storageUrl,
+        thumbUrl: asset.thumb_url || "",
+        contentHash: asset.content_hash || req.params.hash,
+        assetId: "",
+        assetStatus: "none",
+      });
     }
     res.json({ asset: asset || null });
   } catch (err) {
@@ -1011,22 +1528,13 @@ app.post("/api/assets/:id/whitelist", async (req, res) => {
     if (asset.asset_status === "ready" && asset.asset_id) {
       return res.json({ asset });
     }
-    updateAssetStatus(id, userHash, { assetId: null, assetStatus: "pending" });
-    try {
-      const assetType = asset.type === "video" ? "Video" : asset.type === "audio" ? "Audio" : "Image";
-      const volcId = await serverCreateAsset(req, asset.storage_url, asset.name, assetType);
-      const updated = updateAssetStatus(id, userHash, {
-        assetId: "asset://" + volcId, assetStatus: "ready",
-      });
-      console.log(`[Whitelist] Asset ${id} ready: asset://${volcId}`);
-      res.json({ asset: updated });
-    } catch (volcErr) {
-      console.error(`[Whitelist] Asset ${id} failed:`, volcErr.message);
-      const updated = updateAssetStatus(id, userHash, {
-        assetId: null, assetStatus: "failed",
-      });
-      res.json({ asset: updated, error: volcErr.message });
+    const result = await whitelistLocalAsset(req, userHash, asset);
+    if (result.error) {
+      console.error(`[Whitelist] Asset ${id} failed:`, result.error);
+      return res.json({ asset: result.asset, error: result.error });
     }
+    console.log(`[Whitelist] Asset ${id} ready: ${result.asset.asset_id}`);
+    res.json({ asset: result.asset });
   } catch (err) {
     res.status(err.message === "API Key is required" ? 401 : 500).json({ error: err.message });
   }
@@ -1074,36 +1582,53 @@ app.post("/api/assets/bulk-whitelist", async (req, res) => {
     const results = {};
     const errors = {};
     for (const url of storageUrls) {
-      const existing = findAssetByUrl(userHash, url);
-      if (existing?.asset_status === "ready" && existing.asset_id && !force.has(url)) {
-        results[url] = existing.asset_id;
+      const hint = meta.get(url) || {};
+      const originalUrl = url;
+      const mirroredForZh = shouldMirrorCosToTos(req, originalUrl);
+      let storageUrl = await mirrorCosAssetToTosIfNeeded(req, originalUrl, hint.contentHash);
+      const existing = findAssetByUrl(userHash, storageUrl) || findAssetByUrl(userHash, originalUrl);
+      if (existing?.asset_status === "ready" && existing.asset_id && !force.has(originalUrl) && !mirroredForZh) {
+        results[originalUrl] = existing.asset_id;
         continue;
       }
-      const hint = meta.get(url) || {};
       const name = existing?.name || hint.name || deriveNameFromUrl(url);
-      const contentHash = hint.contentHash || undefined;
+      const contentHash = normalizeContentHash(hint.contentHash) || deriveContentHashFromStorageUrl(storageUrl) || deriveContentHashFromStorageUrl(originalUrl);
       const hintType = hint.type || "image";
-      const row = existing || insertAsset({ userHash, name, type: hintType, storageUrl: url, thumbUrl: "", contentHash });
+      const row = upsertKnownAsset({
+        userHash,
+        name,
+        type: existing?.type || hintType,
+        storageUrl,
+        contentHash,
+        assetUrl: existing?.asset_id || "",
+        assetStatus: existing?.asset_status || "",
+      }) || existing || insertAsset({ userHash, name, type: hintType, storageUrl, thumbUrl: "", contentHash });
       // insertAsset may have returned an older record (hash-matched) that's already whitelisted.
       // Reuse its asset_id instead of burning another Volc call (unless caller forced recreate).
-      if (row.asset_status === "ready" && row.asset_id && !force.has(url)) {
-        results[url] = row.asset_id;
+      if (row.asset_status === "ready" && row.asset_id && !force.has(originalUrl) && !mirroredForZh) {
+        results[originalUrl] = row.asset_id;
         continue;
       }
-      if (force.has(url) && row.id) {
-        // Downgrade local row so the recreate path proceeds cleanly
-        updateAssetStatus(row.id, userHash, { assetId: null, assetStatus: "pending" });
-      }
-      const assetType = (row.type || hintType) === "video" ? "Video" : (row.type || hintType) === "audio" ? "Audio" : "Image";
-      try {
-        const volcId = await serverCreateAsset(req, url, name, assetType);
-        updateAssetStatus(row.id, userHash, { assetId: "asset://" + volcId, assetStatus: "ready" });
-        results[url] = "asset://" + volcId;
-      } catch (e) {
-        console.warn("[BulkWhitelist] Failed for", url, e.message);
-        updateAssetStatus(row.id, userHash, { assetId: null, assetStatus: "failed" });
-        results[url] = null;
-        errors[url] = e.message;
+      const result = await whitelistLocalAsset(req, userHash, row, {
+        force: force.has(originalUrl) || mirroredForZh,
+        name,
+        type: row.type || hintType,
+      });
+      if (result.error) {
+        console.warn("[BulkWhitelist] Failed for", originalUrl, result.error);
+        results[originalUrl] = null;
+        errors[originalUrl] = result.error;
+      } else {
+        const updated = upsertKnownAsset({
+          userHash,
+          name: result.asset.name || name,
+          type: result.asset.type || row.type || hintType,
+          storageUrl: result.asset.storage_url || storageUrl,
+          contentHash: result.asset.content_hash || contentHash,
+          assetUrl: result.asset.asset_id,
+          assetStatus: "ready",
+        }) || result.asset;
+        results[originalUrl] = updated.asset_id;
       }
     }
     res.json({ results, errors });
@@ -1132,62 +1657,21 @@ app.put("/api/prefs", (req, res) => {
   }
 });
 
-// ── Daily Cleanup: 4am Beijing time (20:00 UTC previous day) ──
-function clearBucket() {
-  console.log("[COS Cleanup] Starting bucket cleanup...");
-  cos.getBucket(
-    { Bucket: COS_BUCKET, Region: COS_REGION, Prefix: "uploads/", MaxKeys: 1000 },
-    (err, data) => {
-      if (err) {
-        console.error("[COS Cleanup] List error:", err);
-        return;
-      }
-      const objects = (data.Contents || []).map((item) => ({ Key: item.Key }));
-      if (objects.length === 0) {
-        console.log("[COS Cleanup] Bucket already empty.");
-        return;
-      }
-      cos.deleteMultipleObject(
-        {
-          Bucket: COS_BUCKET,
-          Region: COS_REGION,
-          Objects: objects,
-        },
-        (delErr) => {
-          if (delErr) {
-            console.error("[COS Cleanup] Delete error:", delErr);
-          } else {
-            console.log(`[COS Cleanup] Deleted ${objects.length} objects.`);
-            // If there were 1000 objects, there might be more — run again
-            if (objects.length >= 1000) clearBucket();
-          }
-        }
-      );
-    }
-  );
-}
-
-function scheduleDailyCleanup() {
-  const now = new Date();
-  // 4:00 AM Beijing = UTC+8, so 20:00 UTC previous day
-  const target = new Date(now);
-  target.setUTCHours(20, 0, 0, 0); // 20:00 UTC = 04:00 Beijing next day
-  if (target <= now) target.setUTCDate(target.getUTCDate() + 1);
-
-  const delay = target - now;
-  console.log(`[COS Cleanup] Next cleanup in ${Math.round(delay / 60000)} minutes`);
-
-  setTimeout(() => {
-    clearBucket();
-    // After first run, repeat every 24 hours
-    setInterval(clearBucket, 24 * 60 * 60 * 1000);
-  }, delay);
-}
-
-scheduleDailyCleanup();
-
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Front-end version probe. Clients poll this and reload when their bundle hash
+// no longer matches what the server is serving. This is how we make sure that
+// a server-side fix (eg orphan-asset rebuild) actually reaches old browser tabs
+// without waiting for users to refresh.
+app.get("/api/version", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    js: ASSET_HASHES["/static/app.js"],
+    jsZh: ASSET_HASHES["/static/app.zh.js"],
+    css: ASSET_HASHES["/static/app.css"],
+  });
+});
 
 const PORT = process.env.PORT || 10100;
 const server = app.listen(PORT, "0.0.0.0", () => {

@@ -966,7 +966,7 @@ async function handleFileForItem(id, file) {
   if (!file) return;
   pendingUploads++;
   const item = mediaItems.find(m => m.id === id);
-  if (!item) return;
+  if (!item) { pendingUploads--; return; }
   item.name = file.name;
   item.file = file;
 
@@ -983,22 +983,19 @@ async function handleFileForItem(id, file) {
   try {
     let fileUrl, hash, reused = false, reusedAsset = null, thumbUrl = item.thumbUrl;
     if (item.type === "video") {
+      const videoHash = await sha256Hex(file);
+      const existing = await lookupAssetByHash(videoHash);
+      if (existing && existing.storage_url && existing.type === "video") {
+        showToast({ type: "success", title: existing.asset_status === "ready" ? "已复用视频（已加白）" : "已复用视频", desc: file.name || existing.name || "" });
+        fileUrl = existing.storage_url;
+        hash = videoHash;
+        reused = true;
+        reusedAsset = existing;
+        thumbUrl = existing.thumb_url || thumbUrl;
+      }
       let thumbBlob = null;
       if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
         try { thumbBlob = await fetch(item.thumbUrl).then(r => r.blob()); } catch { /* non-fatal */ }
-      }
-      if (thumbBlob) {
-        const thumbHash = await sha256Hex(thumbBlob);
-        const existing = await lookupAssetByHash(thumbHash);
-        if (existing && existing.storage_url) {
-          showToast({ type: "success", title: "已复用视频", desc: file.name || existing.name || "" });
-          fileUrl = existing.storage_url;
-          hash = thumbHash;
-          reused = true;
-          reusedAsset = existing;
-          thumbUrl = existing.thumb_url || thumbUrl;
-          item.contentHash = thumbHash;
-        }
       }
       if (!reused) {
         const form = new FormData();
@@ -1007,8 +1004,8 @@ async function handleFileForItem(id, file) {
           ? new File([thumbBlob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" })
           : null;
         const [videoResp, uploadedThumbUrl] = await Promise.all([
-          fetch("/api/upload/video", { method: "POST", body: form }),
-          thumbFile ? uploadAssetWithHash(thumbFile).then(r => r.fileUrl).catch(() => null) : Promise.resolve(null),
+          fetch("/api/upload/video", { method: "POST", headers: uploadHeaders(), body: form }),
+          thumbFile ? uploadAssetWithHash(thumbFile, null, { dedupe: false }).then(r => r.fileUrl).catch(() => null) : Promise.resolve(null),
         ]);
         if (!videoResp.ok) {
           const err = await videoResp.json().catch(() => ({}));
@@ -1016,7 +1013,7 @@ async function handleFileForItem(id, file) {
         }
         ({ fileUrl } = await videoResp.json());
         if (uploadedThumbUrl) thumbUrl = uploadedThumbUrl;
-        if (thumbBlob) hash = await sha256Hex(thumbBlob);
+        hash = videoHash;
         item.contentHash = hash || "";
       }
     } else {
@@ -1030,6 +1027,7 @@ async function handleFileForItem(id, file) {
     item.cosUrl = fileUrl;
     item.contentHash = hash || "";
     item.assetUrl = reusedAsset?.asset_id || "";
+    item.assetStatus = reusedAsset?.asset_status || "";
     item.persistedThumbUrl = thumbUrl || "";
     renderStack();
     if (reused && reusedAsset) {
@@ -1038,7 +1036,7 @@ async function handleFileForItem(id, file) {
       assetLibrary.unshift(reusedAsset);
       renderAssetGrid();
     } else {
-      registerAssetOnUpload(item);
+      await registerAssetOnUpload(item);
     }
   } catch (err) {
     alert(translateError(err.message) || ("上传失败：" + (err.message || "请重试")));
@@ -1098,12 +1096,15 @@ function renderKfCard(which) {
 async function uploadKfFile(which, file) {
   const obj = which === "first" ? kfFirst : kfLast;
   if (!obj) return;
+  pendingUploads++;
   try {
     const { fileUrl, hash, reused, asset } = await uploadAssetWithHash(file);
     obj.url = fileUrl;
     obj.cosUrl = fileUrl;
+    obj.type = "image";
     obj.contentHash = hash;
     obj.assetUrl = asset?.asset_id || "";
+    obj.assetStatus = asset?.asset_status || "";
     console.log(`[KF Upload] ${which} uploaded:`, fileUrl, reused ? "(reused)" : "");
     if (reused && asset) {
       const existingIdx = assetLibrary.findIndex(a => a.id === asset.id);
@@ -1111,23 +1112,42 @@ async function uploadKfFile(which, file) {
       assetLibrary.unshift(asset);
       renderAssetGrid();
     } else {
-      registerAssetOnUpload({ name: file.name, type: "image", cosUrl: fileUrl, url: fileUrl, contentHash: hash });
+      await registerAssetOnUpload(obj);
     }
   } catch (err) {
     alert(translateError(err.message) || ("上传失败：" + (err.message || "请重试")));
     if (which === "first") kfFirst = null; else kfLast = null;
     renderKfCard(which);
+  } finally {
+    pendingUploads--;
   }
 }
 
 // ── Build request ──
-function apiHeaders() {
+function preferredStorage() {
+  const base = document.getElementById("i-base")?.value || "";
+  const host = location.hostname || "";
+  return base.includes("anyfast.com.cn") || host.includes("anyfast.com.cn") ? "tos" : "cos";
+}
+
+function uploadHeaders() {
   const key = document.getElementById("i-key").value.trim();
   const base = document.getElementById("i-base").value.trim();
-  const h = { "Content-Type": "application/json" };
+  const h = { "X-Storage": preferredStorage() };
   if (key) h["X-Api-Key"] = key;
   if (base) h["X-Api-Base"] = encodeURI(base);
   return h;
+}
+
+function apiHeaders() {
+  return { ...uploadHeaders(), "Content-Type": "application/json" };
+}
+
+async function readJsonResponse(resp) {
+  const text = await resp.text();
+  if (!text) return {};
+  try { return JSON.parse(text); }
+  catch { return { error: text }; }
 }
 
 // 剥离 Seedance / 上游模型不接受的字符（emoji、象形符号、装饰符、零宽连接符），
@@ -1146,35 +1166,44 @@ function buildRequest() {
   if (prompt) content.push({ type: "text", text: prompt });
 
   const refMode = document.getElementById("i-ref").value;
-  // 上游只接受 asset:// 或 https:// URL，其它（blob:、空串、无 scheme）都会
-  // 报 invalid url scheme。在出口处强校验，杜绝 UI 残留状态污染请求体。
-  const pickUrl = (item) => {
-    const candidates = [item.assetUrl, item.cosUrl, item.url];
+  // 页面状态以稳定的桶 URL 为中心；服务端会在转发上游前把 image/video
+  // 的 storage URL 解析成 asset://。
+  const pickStorageOrAsset = (item) => {
+    const candidates = [item.cosUrl, item.url, item.assetUrl];
     for (const u of candidates) {
       if (typeof u === "string" && (u.startsWith("asset://") || u.startsWith("https://"))) return u;
     }
     return "";
   };
 
+  // 每个 asset:// 同时带上 cosUrl 诊断上下文；server 转发上游前会剥掉。
+  const cosOf = (item) => {
+    const u = item.cosUrl || item.url;
+    return (typeof u === "string" && u.startsWith("https://")) ? u : "";
+  };
+
   if (refMode === "keyframes") {
     if (kfFirst) {
-      const u = pickUrl(kfFirst);
-      if (u) content.push({ type: "image_url", image_url: { url: u }, role: "first_frame" });
+      const u = pickStorageOrAsset(kfFirst);
+      if (u) content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(kfFirst), _name: kfFirst.name || "", _contentHash: kfFirst.contentHash || "" }, role: "first_frame" });
     }
     if (kfLast) {
-      const u = pickUrl(kfLast);
-      if (u) content.push({ type: "image_url", image_url: { url: u }, role: "last_frame" });
+      const u = pickStorageOrAsset(kfLast);
+      if (u) content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(kfLast), _name: kfLast.name || "", _contentHash: kfLast.contentHash || "" }, role: "last_frame" });
     }
   } else {
     for (const item of mediaItems) {
-      const u = pickUrl(item);
+      if (item.type === "audio") {
+        const u = pickStorageOrAsset(item);
+        if (u) content.push({ type: "audio_url", audio_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_audio" });
+        continue;
+      }
+      const u = pickStorageOrAsset(item);
       if (!u) continue;
       if (item.type === "image") {
-        content.push({ type: "image_url", image_url: { url: u }, role: "reference_image" });
+        content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_image" });
       } else if (item.type === "video") {
-        content.push({ type: "video_url", video_url: { url: u }, role: "reference_video" });
-      } else if (item.type === "audio") {
-        content.push({ type: "audio_url", audio_url: { url: u }, role: "reference_audio" });
+        content.push({ type: "video_url", video_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_video" });
       }
     }
   }
@@ -1213,9 +1242,28 @@ async function generate() {
       showKeyModal(); return;
     }
     const refMode = document.getElementById("i-ref").value;
-    // Promote already-whitelisted cos URLs to asset:// before building the body,
-    // so we don't waste a round-trip on PrivacyInformation when we already have asset_ids.
+    // 提交前主动加白：seedance 对裸 cosUrl 的 image/video 会触发隐私拦截，
+    // 必须先把所有 cosUrl 转成 asset://。reconcileAssetUrls 现在做两件事：
+    // 1) 查 asset library 看哪些已经 ready；2) 把还没 ready 的批量加白。
     await reconcileAssetUrls();
+
+    // 提交前再校验：image/video 必须有 asset:// 才能进 generate。如果 reconcile
+    // 没能把所有 visual 都加白，宁可让用户重试也不要静默丢素材。
+    const visualSources = refMode === "keyframes"
+      ? [kfFirst, kfLast].filter(Boolean)
+      : mediaItems.filter(m => m && m.type !== "audio" && (m.cosUrl || m.url));
+    const stranded = visualSources.filter(m => !(typeof m.assetUrl === "string" && m.assetUrl.startsWith("asset://")));
+    if (stranded.length > 0) {
+      btn.disabled = false; btn.classList.remove("sending");
+      showToast({
+        type: "warn",
+        title: "素材正在加白",
+        desc: `${stranded.length} 个素材尚未就绪，请几秒后重试`,
+        duration: 4000,
+      });
+      return;
+    }
+
     const body = buildRequest();
     console.log("[Generate] Request body:", JSON.stringify(body, null, 2));
     if (body.content.length === 0) {
@@ -1255,21 +1303,20 @@ async function runSubmit(task, body) {
     try {
       console.log(`[Generate] Attempt ${attempt}/3...`);
       const resp = await fetch("/api/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify(currentBody) });
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       const errMsg = (typeof data.error === "string" ? data.error : data.error?.message) || data.message || data.msg || "";
       if (!resp.ok || (data.code && data.code !== "success")) {
         lastErr = errMsg || JSON.stringify(data);
         const rawJson = JSON.stringify(data);
         console.warn(`[Generate] Attempt ${attempt} failed:`, lastErr);
-        // 上游报 invalid url scheme：asset_id 的内部 URL 失效。我们本地有原 cosUrl，
-        // 静默 forceRecreate + 替换 body 重发，不弹窗。失败则继续走下面分支。
-        if (rawJson.includes("invalid url scheme") && attempt < 3) {
-          console.log("[Generate] invalid url scheme detected, silently rehealing...");
-          const recovered = await silentRehealSchemeError(currentBody, task);
-          if (recovered) {
-            currentBody = recovered;
-            continue;
-          }
+        // 上游报 invalid url scheme 通常是 asset 服务和生成服务之间的索引/解析延迟。
+        // 不要在这里重建永久 asset；继续用同一个 body 等待重试，避免同一素材
+        // 被反复 CreateAsset。
+        if ((rawJson.includes("invalid url scheme") || data.code === "ASSET_SYNC_PENDING") && attempt < 3) {
+          const waitMs = attempt === 1 ? 15000 : 30000;
+          console.log(`[Generate] asset sync pending — 等 ${waitMs / 1000}s 后复用同一 body 重试`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
         }
         // Upstream asset_id orphaned → ask user to confirm re-upload, then retry
         if (data.code === "ASSETS_UNRECOVERABLE" && Array.isArray(data.assetIds) && data.assetIds.length && attempt < 3) {
@@ -1281,8 +1328,20 @@ async function runSubmit(task, body) {
           lastErr = "已取消重新加白";
           break;
         }
-        // PrivacyInformation → server-side bulk whitelist, then retry
+        // PrivacyInformation → server-side bulk whitelist, then retry。
+        // 如果 body 里 image/video 已经全是 asset://，重试也不会变好——上游
+        // 是在审图片本身（含真人），不是 URL 形式问题。直接放弃，让用户看到
+        // 真实错误信息（"图片可能含真人"）而不是干等 3 次失败。
         if ((lastErr.includes("PrivacyInformation") || rawJson.includes("PrivacyInformation")) && attempt < 3) {
+          const allVisualOnAsset = (currentBody.content || []).every(c => {
+            if (c.type !== "image_url" && c.type !== "video_url") return true;
+            const url = c.image_url?.url || c.video_url?.url || "";
+            return url.startsWith("asset://");
+          });
+          if (allVisualOnAsset) {
+            console.log("[Generate] PrivacyInformation persists with all-asset body — image content rejected by upstream, not retrying");
+            break;
+          }
           console.log("[Generate] PrivacyInformation detected, bulk whitelisting...");
           task.status = "whitelisting";
           task.whitelistStart = Date.now();
@@ -1307,7 +1366,7 @@ async function runSubmit(task, body) {
                 method: "POST", headers: assetHeaders(),
                 body: JSON.stringify({ storageUrls, items }),
               });
-              const { results, errors: wlErrors } = await resp.json();
+              const { results, errors: wlErrors } = await readJsonResponse(resp);
               const urlMap = {};
               for (const [cosUrl, assetUrl] of Object.entries(results || {})) {
                 if (!assetUrl) continue;
@@ -1398,7 +1457,7 @@ async function pollAll() {
   for (const task of running) {
     try {
       const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       task.response = data;
       if (resp.ok && data.code !== "fail_to_fetch_task") {
         const parsed = parseResponse(data);
@@ -1703,6 +1762,8 @@ function translateError(raw) {
   const msg = stripErrorNoise(raw);
   if (!msg) return null;
   const m = msg.toLowerCase();
+  if (m.includes("unexpected end of json input") || m.includes("empty response body"))
+    return "服务返回空响应，请稍后重试";
 
   // ── Gateway / auth ────────────────────────────────────────
   if (msg.includes("无效的令牌") || msg.includes("无效令牌") || m.includes("invalid token"))
@@ -1732,6 +1793,10 @@ function translateError(raw) {
     return "图片内容不符合规范，请更换图片";
   if (m.includes("content moderation") || msg.includes("内容审核"))
     return "内容审核未通过，请调整提示词或素材";
+  if (m.includes("invalid url scheme"))
+    return "素材已加白但上游暂未同步，请稍后重试";
+  if (m.includes("asset_sync_pending"))
+    return "素材已加白但上游暂未同步，请稍后重试";
   if (m.includes("image_url"))
     return "图片处理异常，请重新上传图片后重试";
   if (m.includes("resolve asset") || msg.includes("素材处理中"))
@@ -1862,7 +1927,7 @@ async function recoverUnrecoverableAssets(currentBody, assetIds, task) {
       method: "POST", headers: assetHeaders(),
       body: JSON.stringify({ storageUrls, items, forceRecreate: storageUrls }),
     });
-    const { results, errors: wlErrors } = await resp.json();
+    const { results, errors: wlErrors } = await readJsonResponse(resp);
     const oldToNew = {};
     for (const r of recoverable) {
       const newAssetUrl = results?.[r.cosUrl];
@@ -1894,66 +1959,6 @@ async function recoverUnrecoverableAssets(currentBody, assetIds, task) {
   } catch (e) {
     console.warn("[Recover] bulk-whitelist failed:", e.message);
     showToast({ type: "warn", title: "重新加白失败", desc: e.message, duration: 5000 });
-    return null;
-  }
-}
-
-// 上游 invalid url scheme 静默恢复：用本地 cosUrl 强制重建（forceRecreate）
-// 并替换 body 里的 asset:// URL，无需弹窗。失败返回 null。
-async function silentRehealSchemeError(currentBody, task) {
-  const snap = task?.input || {};
-  const suspects = [];
-  for (const c of (currentBody?.content || [])) {
-    const slot = c.image_url || c.video_url || c.audio_url;
-    const url = slot?.url;
-    if (typeof url === "string" && url.startsWith("asset://")) {
-      const info = lookupAssetByAssetUrl(url, snap);
-      if (info?.cosUrl) suspects.push({ assetId: url, ...info });
-    }
-  }
-  if (suspects.length === 0) return null;
-  const seen = new Set();
-  const unique = suspects.filter(s => seen.has(s.assetId) ? false : (seen.add(s.assetId), true));
-  task.status = "whitelisting";
-  task.whitelistStart = Date.now();
-  renderTasks();
-  try {
-    const storageUrls = unique.map(r => r.cosUrl);
-    const items = unique.map(r => ({ url: r.cosUrl, contentHash: r.contentHash, name: r.name, type: r.type }));
-    const resp = await fetch("/api/assets/bulk-whitelist", {
-      method: "POST", headers: assetHeaders(),
-      body: JSON.stringify({ storageUrls, items, forceRecreate: storageUrls }),
-    });
-    const { results, errors: wlErrors } = await resp.json();
-    const oldToNew = {};
-    for (const r of unique) {
-      const newAssetUrl = results?.[r.cosUrl];
-      if (!newAssetUrl || newAssetUrl === r.assetId) continue;
-      oldToNew[r.assetId] = newAssetUrl;
-      const item = mediaItems.find(m => m.assetUrl === r.assetId);
-      if (item) item.assetUrl = newAssetUrl;
-      if (kfFirst && kfFirst.assetUrl === r.assetId) kfFirst.assetUrl = newAssetUrl;
-      if (kfLast && kfLast.assetUrl === r.assetId) kfLast.assetUrl = newAssetUrl;
-    }
-    const firstErr = Object.values(wlErrors || {})[0];
-    if (firstErr) showToast({ type: "warn", title: "部分素材加白失败", desc: firstErr, duration: 5000 });
-    if (Object.keys(oldToNew).length === 0) return null;
-    const swapUrl = (c, key) => oldToNew[c[key]?.url]
-      ? { ...c, [key]: { ...c[key], url: oldToNew[c[key].url] } }
-      : c;
-    const newBody = {
-      ...currentBody,
-      content: currentBody.content.map(c => {
-        if (c.type === "image_url") return swapUrl(c, "image_url");
-        if (c.type === "video_url") return swapUrl(c, "video_url");
-        if (c.type === "audio_url") return swapUrl(c, "audio_url");
-        return c;
-      }),
-    };
-    loadAssetLibrary();
-    return newBody;
-  } catch (e) {
-    console.warn("[SchemeReheal] bulk-whitelist failed:", e.message);
     return null;
   }
 }
@@ -1994,12 +1999,7 @@ let assetLibrary = [];
 let _assetLoading = false;
 
 function assetHeaders() {
-  const key = document.getElementById("i-key").value.trim();
-  const base = document.getElementById("i-base").value.trim();
-  const h = { "Content-Type": "application/json" };
-  if (key) h["X-Api-Key"] = key;
-  if (base) h["X-Api-Base"] = encodeURI(base);
-  return h;
+  return apiHeaders();
 }
 
 // ── Toast notifications ──
@@ -2066,7 +2066,7 @@ async function lookupAssetByHash(hash) {
   const key = document.getElementById("i-key").value.trim();
   if (!key) return null;
   try {
-    const r = await fetch(`/api/assets/by-hash/${hash}`, { headers: { "X-Api-Key": key } });
+    const r = await fetch(`/api/assets/by-hash/${hash}`, { headers: uploadHeaders() });
     if (!r.ok) return null;
     const data = await r.json();
     return data.asset || null;
@@ -2075,27 +2075,29 @@ async function lookupAssetByHash(hash) {
 
 // Unified uploader: computes hash, checks server dedup, presigns with deterministic key,
 // uploads via XHR (with progress callback). Returns { fileUrl, hash, reused, asset? }.
-async function uploadAssetWithHash(file, onProgress) {
+async function uploadAssetWithHash(file, onProgress, options = {}) {
   const hash = await sha256Hex(file);
   // 1) Server-side dedup
-  const existing = await lookupAssetByHash(hash);
-  if (existing && existing.storage_url) {
-    const statusDesc = existing.asset_status === "ready"
-      ? "已复用素材（已加白）"
-      : "已复用素材";
-    showToast({
-      type: "success",
-      title: statusDesc,
-      desc: file.name || existing.name || "",
-    });
-    return { fileUrl: existing.storage_url, hash, reused: true, asset: existing };
+  if (options.dedupe !== false) {
+    const existing = await lookupAssetByHash(hash);
+    if (existing && existing.storage_url) {
+      const statusDesc = existing.asset_status === "ready"
+        ? "已复用素材（已加白）"
+        : "已复用素材";
+      showToast({
+        type: "success",
+        title: statusDesc,
+        desc: file.name || existing.name || "",
+      });
+      return { fileUrl: existing.storage_url, hash, reused: true, asset: existing };
+    }
   }
   // 2) Presign with deterministic key (assets/{hash}.{ext})
   const ext = ((file.name || "file").split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
   const clientKey = `assets/${hash}.${ext || "bin"}`;
   const presignResp = await fetch("/api/cos/presign", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...uploadHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({
       filename: file.name || `${hash}.${ext || "bin"}`,
       contentType: file.type || "application/octet-stream",
@@ -2146,7 +2148,7 @@ async function loadAssetLibrary() {
   try {
     const resp = await fetch("/api/assets", { headers: assetHeaders() });
     if (resp.ok) {
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       assetLibrary = data.assets || [];
     }
   } catch (e) {
@@ -2168,40 +2170,82 @@ function lookupAssetUrl(storageUrl) {
 // Before submitting, reconcile in-memory media with the asset library so any item that's
 // ALREADY been whitelisted goes out as asset:// on the FIRST try (skips the PrivacyInformation
 // → bulk-whitelist → retry round-trip).
+//
+// Seedance 硬约束：image/video 只要走裸 cosUrl 提交 generate，必触发隐私拦截。
+// 所以这里不光"查"，还要主动加白：经过这一步后，如果还有 image/video 没拿到
+// asset://，调用方应当让用户重试而不是带病提交。
 async function reconcileAssetUrls() {
-  // Hits upstream Volc ListAssets via /api/assets/sync so out-of-band whitelists
-  // (other devices/sessions) are picked up too.
-  const key = document.getElementById("i-key").value.trim();
-  if (key) {
-    try {
-      const resp = await fetch("/api/assets/sync", { headers: assetHeaders() });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (Array.isArray(data.assets)) {
-          assetLibrary = data.assets;
-          renderAssetGrid();
-        }
-      }
-    } catch (e) {
-      console.warn("[AssetSync] Failed:", e.message);
-    }
-  }
   if (assetLibrary.length === 0) {
     await loadAssetLibrary();
   }
+  // Pass 1：低成本查找——assetLibrary 里已经 ready 的直接复用 asset_id。
   for (const item of mediaItems) {
     if (!item.assetUrl) {
       const found = lookupAssetUrl(item.cosUrl || item.url);
-      if (found) item.assetUrl = found;
+      if (found) { item.assetUrl = found; item.assetStatus = "ready"; }
     }
   }
   if (kfFirst && !kfFirst.assetUrl) {
     const found = lookupAssetUrl(kfFirst.cosUrl || kfFirst.url);
-    if (found) kfFirst.assetUrl = found;
+    if (found) { kfFirst.assetUrl = found; kfFirst.assetStatus = "ready"; }
   }
   if (kfLast && !kfLast.assetUrl) {
     const found = lookupAssetUrl(kfLast.cosUrl || kfLast.url);
-    if (found) kfLast.assetUrl = found;
+    if (found) { kfLast.assetUrl = found; kfLast.assetStatus = "ready"; }
+  }
+
+  // Pass 2：仍是裸 cosUrl 的 visual 素材主动加白。audio 跳过（seedance 不拦音频）。
+  const refMode = document.getElementById("i-ref")?.value || "all";
+  const targets = [];
+  const collect = (item) => {
+    if (!item) return;
+    if (item.assetUrl) return;
+    if (item.assetStatus === "pending") return;
+    if (item.type === "audio") return;
+    const url = item.cosUrl || item.url;
+    if (!url || !url.startsWith("https://")) return;
+    targets.push({ item, url });
+  };
+  if (refMode === "keyframes") {
+    collect(kfFirst);
+    collect(kfLast);
+  } else {
+    for (const m of mediaItems) collect(m);
+  }
+  if (targets.length === 0) return;
+
+  try {
+    const seen = new Set();
+    const unique = targets.filter(t => seen.has(t.url) ? false : (seen.add(t.url), true));
+    const storageUrls = unique.map(t => t.url);
+    const items = unique.map(t => ({
+      url: t.url,
+      contentHash: t.item.contentHash || "",
+      name: t.item.name || "",
+      type: t.item.type || "image",
+    }));
+    const resp = await fetch("/api/assets/bulk-whitelist", {
+      method: "POST", headers: assetHeaders(),
+      body: JSON.stringify({ storageUrls, items }),
+    });
+    if (!resp.ok) {
+      console.warn("[Reconcile] bulk-whitelist HTTP", resp.status);
+      return;
+    }
+    const { results, errors } = await readJsonResponse(resp);
+    if (!results) return;
+    for (const t of targets) {
+      const assetUrl = results[t.url];
+      if (assetUrl) {
+        t.item.assetUrl = assetUrl;
+        t.item.assetStatus = "ready";
+      } else if (errors?.[t.url]) {
+        t.item.assetStatus = "failed";
+      }
+    }
+    loadAssetLibrary();
+  } catch (e) {
+    console.warn("[Reconcile] proactive whitelist failed:", e.message);
   }
 }
 
@@ -2340,7 +2384,7 @@ async function whitelistAsset(id) {
   renderAssetGrid();
   try {
     const resp = await fetch(`/api/assets/${id}/whitelist`, { method: "POST", headers: assetHeaders() });
-    const data = await resp.json();
+    const data = await readJsonResponse(resp);
     if (data.asset) {
       const idx = assetLibrary.findIndex(x => x.id === id);
       if (idx >= 0) assetLibrary[idx] = data.asset;
@@ -2378,6 +2422,7 @@ function insertSavedAsset(id) {
       name: a.name || "素材",
       cosUrl: a.storage_url,
       assetUrl: a.asset_id || null,
+      assetStatus: a.asset_status || "",
     };
     mediaItems.push(newItem);
     renderStack();
@@ -2394,7 +2439,9 @@ function insertSavedAsset(id) {
 
 async function registerAssetOnUpload(item) {
   const key = document.getElementById("i-key").value.trim();
-  if (!key) return;
+  if (!key) return null;
+  const storageUrl = item.cosUrl || item.url;
+  if (!storageUrl || !storageUrl.startsWith("https://")) return null;
   try {
     const resp = await fetch("/api/assets", {
       method: "POST",
@@ -2402,24 +2449,28 @@ async function registerAssetOnUpload(item) {
       body: JSON.stringify({
         name: item.name || "",
         type: item.type || "image",
-        storageUrl: item.cosUrl || item.url,
+        storageUrl,
         thumbUrl: item.persistedThumbUrl || "",
         contentHash: item.contentHash || "",
       }),
     });
     if (resp.ok) {
-      const data = await resp.json();
+      const data = await readJsonResponse(resp);
       if (data.asset) {
         if (data.asset.asset_id && data.asset.asset_status === "ready") {
           item.assetUrl = data.asset.asset_id;
         }
+        item.assetStatus = data.asset.asset_status || "";
         const idx = assetLibrary.findIndex(a => a.id === data.asset.id);
         if (idx >= 0) assetLibrary[idx] = data.asset;
         else assetLibrary.unshift(data.asset);
         renderAssetGrid();
+        syncPrefs();
+        return data.asset;
       }
     }
   } catch (e) { console.warn("[AssetLib] Register failed:", e.message); }
+  return null;
 }
 
 function toggleAbout() {
@@ -2461,3 +2512,40 @@ function requireApiKey(callback) {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && document.getElementById("key-modal-ov").style.display === "flex") closeKeyModal();
 });
+
+// ── 新版上线自动刷新 ──
+// 从当前 <script src="?v=HASH"> 取本页的 bundle hash，每分钟拉一次
+// /api/version 比对。一旦服务端 hash 变了说明已经重新部署，刷新让用户跑上
+// 新代码——否则老 tab 会一直撞到已修的问题。生成任务正在跑或文件正在上传时
+// 推迟刷新，避免打断用户的工作。
+const _selfJsHash = (() => {
+  const scripts = document.querySelectorAll('script[src*="/static/app.zh.js"]');
+  for (const s of scripts) {
+    const m = (s.getAttribute("src") || "").match(/[?&]v=([^&]+)/);
+    if (m) return m[1];
+  }
+  return null;
+})();
+let _reloadScheduled = false;
+async function checkVersion() {
+  if (_reloadScheduled || !_selfJsHash) return;
+  try {
+    const r = await fetch("/api/version", { cache: "no-store" });
+    if (!r.ok) return;
+    const v = await r.json();
+    if (v && typeof v.jsZh === "string" && v.jsZh && v.jsZh !== _selfJsHash) {
+      _reloadScheduled = true;
+      const tryReload = () => {
+        if (hasRunningTasks() || pendingUploads > 0 || document.hidden) {
+          setTimeout(tryReload, 5000);
+          return;
+        }
+        console.log(`[Version] new bundle (${v.jsZh}), reloading…`);
+        location.reload();
+      };
+      tryReload();
+    }
+  } catch { /* 网络抖动忽略，下个 tick 再试 */ }
+}
+setInterval(checkVersion, 60000);
+setTimeout(checkVersion, 30000);
