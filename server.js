@@ -428,8 +428,8 @@ function orderContentForUpstream(body) {
   if (!Array.isArray(body?.content)) return body;
   const rank = (item) => {
     if (item?.type === "text") return 0;
-    if (item?.type === "video_url") return 1;
-    if (item?.type === "image_url") return 2;
+    if (item?.type === "image_url") return 1;
+    if (item?.type === "video_url") return 2;
     if (item?.type === "audio_url") return 3;
     return 4;
   };

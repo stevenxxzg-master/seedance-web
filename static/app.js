@@ -1217,7 +1217,7 @@ function buildRequest() {
         grouped.video.push({ type: "video_url", video_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_video" });
       }
     }
-    content.push(...grouped.video, ...grouped.image, ...grouped.audio);
+    content.push(...grouped.image, ...grouped.video, ...grouped.audio);
   }
 
   const body = {
