@@ -1202,20 +1202,22 @@ function buildRequest() {
       if (u) content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(kfLast), _name: kfLast.name || "", _contentHash: kfLast.contentHash || "" }, role: "last_frame" });
     }
   } else {
+    const grouped = { video: [], image: [], audio: [] };
     for (const item of mediaItems) {
       if (item.type === "audio") {
         const u = pickStorageOrAsset(item);
-        if (u) content.push({ type: "audio_url", audio_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_audio" });
+        if (u) grouped.audio.push({ type: "audio_url", audio_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_audio" });
         continue;
       }
       const u = pickStorageOrAsset(item);
       if (!u) continue;
       if (item.type === "image") {
-        content.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_image" });
+        grouped.image.push({ type: "image_url", image_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_image" });
       } else if (item.type === "video") {
-        content.push({ type: "video_url", video_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_video" });
+        grouped.video.push({ type: "video_url", video_url: { url: u, _cosUrl: cosOf(item), _name: item.name || "", _contentHash: item.contentHash || "" }, role: "reference_video" });
       }
     }
+    content.push(...grouped.video, ...grouped.image, ...grouped.audio);
   }
 
   const body = {

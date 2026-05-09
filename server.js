@@ -377,6 +377,7 @@ app.post("/api/generate", async (req, res) => {
 async function forwardVideoGeneration(req, body, { rid = requestId(req, "gen"), attempt = "initial" } = {}) {
   const started = Date.now();
   const upstreamBody = normalizeAssetUrlSchemeForUpstream(body);
+  orderContentForUpstream(upstreamBody);
   const upstreamUrl = `${getBase(req)}/v1/video/generations`;
   const resp = await fetch(upstreamUrl, {
     method: "POST",
@@ -420,6 +421,22 @@ function normalizeAssetUrlSchemeForUpstream(originalBody) {
       }
     }
   }
+  return body;
+}
+
+function orderContentForUpstream(body) {
+  if (!Array.isArray(body?.content)) return body;
+  const rank = (item) => {
+    if (item?.type === "text") return 0;
+    if (item?.type === "video_url") return 1;
+    if (item?.type === "image_url") return 2;
+    if (item?.type === "audio_url") return 3;
+    return 4;
+  };
+  body.content = body.content
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (rank(a.item) - rank(b.item)) || (a.index - b.index))
+    .map(({ item }) => item);
   return body;
 }
 
