@@ -974,6 +974,14 @@ async function handleFileForItem(id, file) {
   if (!item) { pendingUploads--; return; }
   item.name = file.name;
   item.file = file;
+  // A replaced card keeps its position and thumbnail immediately, but it must
+  // not keep the previous asset identity while the new upload is in flight.
+  item.url = "";
+  item.cosUrl = "";
+  item.assetUrl = "";
+  item.assetStatus = "uploading";
+  item.contentHash = "";
+  item.persistedThumbUrl = "";
 
   // Local preview (revoke old blob URL to prevent memory leak)
   if (item.thumbUrl && item.thumbUrl.startsWith("blob:")) {
@@ -1236,6 +1244,18 @@ function buildRequest() {
   return body;
 }
 
+function snapshotMediaItem(m) {
+  const storageUrl = m.cosUrl || m.url || "";
+  return {
+    type: m.type,
+    url: storageUrl,
+    cosUrl: storageUrl,
+    name: m.name,
+    assetUrl: m.assetUrl || "",
+    contentHash: m.contentHash || "",
+  };
+}
+
 // ── Generate ──
 async function generate() {
   const btn = document.getElementById("gen-btn");
@@ -1290,9 +1310,9 @@ async function generate() {
       refMode,
       webSearch: document.getElementById("i-search")?.checked || false,
       watermark: document.getElementById("i-wm")?.checked || false,
-      mediaItems: refMode === "all" ? mediaItems.filter(m => m.url).map(m => ({ type: m.type, url: m.url, cosUrl: m.cosUrl || "", name: m.name, assetUrl: m.assetUrl || "", contentHash: m.contentHash || "" })) : [],
-      kfFirst: (kfFirst && kfFirst.url) ? { url: kfFirst.url, cosUrl: kfFirst.cosUrl || "", name: kfFirst.name, assetUrl: kfFirst.assetUrl || "", contentHash: kfFirst.contentHash || "" } : null,
-      kfLast: (kfLast && kfLast.url) ? { url: kfLast.url, cosUrl: kfLast.cosUrl || "", name: kfLast.name, assetUrl: kfLast.assetUrl || "", contentHash: kfLast.contentHash || "" } : null,
+      mediaItems: refMode === "all" ? mediaItems.filter(m => m.cosUrl || m.url).map(snapshotMediaItem) : [],
+      kfFirst: (kfFirst && (kfFirst.cosUrl || kfFirst.url)) ? snapshotMediaItem(kfFirst) : null,
+      kfLast: (kfLast && (kfLast.cosUrl || kfLast.url)) ? snapshotMediaItem(kfLast) : null,
     };
     // Show placeholder task immediately
     const task = { id: null, status: "submitting", progress: 0, created: Date.now(), response: null, videoUrl: null, pollErrors: 0, input: inputSnapshot };
@@ -1632,6 +1652,8 @@ function restoreInput(taskId) {
         thumbUrl: m.cosUrl || m.url,
         cosUrl: m.cosUrl || "",
         name: m.name,
+        assetUrl: m.assetUrl || "",
+        contentHash: m.contentHash || "",
         file: null
       });
     }
@@ -1641,11 +1663,11 @@ function restoreInput(taskId) {
   // Restore keyframes
   if (inp.refMode === "keyframes") {
     if (inp.kfFirst) {
-      kfFirst = { url: inp.kfFirst.url, thumbUrl: inp.kfFirst.cosUrl || inp.kfFirst.url, cosUrl: inp.kfFirst.cosUrl || "", name: inp.kfFirst.name, file: null };
+      kfFirst = { url: inp.kfFirst.url, thumbUrl: inp.kfFirst.cosUrl || inp.kfFirst.url, cosUrl: inp.kfFirst.cosUrl || "", name: inp.kfFirst.name, assetUrl: inp.kfFirst.assetUrl || "", contentHash: inp.kfFirst.contentHash || "", file: null };
       renderKfCard("first");
     }
     if (inp.kfLast) {
-      kfLast = { url: inp.kfLast.url, thumbUrl: inp.kfLast.cosUrl || inp.kfLast.url, cosUrl: inp.kfLast.cosUrl || "", name: inp.kfLast.name, file: null };
+      kfLast = { url: inp.kfLast.url, thumbUrl: inp.kfLast.cosUrl || inp.kfLast.url, cosUrl: inp.kfLast.cosUrl || "", name: inp.kfLast.name, assetUrl: inp.kfLast.assetUrl || "", contentHash: inp.kfLast.contentHash || "", file: null };
       renderKfCard("last");
     }
   }
