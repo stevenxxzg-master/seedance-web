@@ -150,6 +150,7 @@ function applyPrefs(p) {
     tasks.length = 0;
     // Rescue: if a task was marked failed but has a videoUrl, restore to completed
     for (const t of p.tasks) {
+      if (t.status === "failure") t.status = "failed";
       if (t.videoUrl) { t.status = "completed"; t.progress = null; }
       tasks.push(t);
     }
@@ -1470,7 +1471,7 @@ function saveTasks() {
 }
 
 function hasRunningTasks() {
-  const TERMINAL = ["completed","failed","cancelled"];
+  const TERMINAL = ["completed","failed","failure","cancelled"];
   return tasks.some(t => t.id && !TERMINAL.includes(t.status));
 }
 function startPolling() {
@@ -1486,7 +1487,7 @@ function stopPolling() {
 }
 
 async function pollAll() {
-  const TERMINAL = ["completed","failed","cancelled"];
+  const TERMINAL = ["completed","failed","failure","cancelled"];
   const running = tasks.filter(t => t.id && !TERMINAL.includes(t.status));
   if (running.length === 0) { clearInterval(pollTimer); pollTimer = null; saveTasks(); renderTasks(); return; }
   let changed = false;
@@ -1527,7 +1528,7 @@ async function pollAll() {
   if (changed) renderTasks();
 }
 
-const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"failed","CANCELLED":"cancelled","running":"running","completed":"completed","failed":"failed","cancelled":"cancelled","submitted":"submitted","success":"completed","succeeded":"completed","done":"completed"};
+const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"failed","FAILURE":"failed","CANCELLED":"cancelled","running":"running","completed":"completed","failed":"failed","failure":"failed","cancelled":"cancelled","submitted":"submitted","success":"completed","succeeded":"completed","done":"completed"};
 
 function parseResponse(raw) {
   const wrap = raw.data||raw; const inner = wrap.data||wrap;
@@ -1548,7 +1549,7 @@ function findVideoUrl(d) {
 }
 
 function fmtSec(s){if(s<0)s=0;s=Math.floor(s);const m=Math.floor(s/60);return m>0?`${m}m ${s%60}s`:`${s}s`}
-const TERMINAL_STATES=["completed","failed","cancelled"];
+const TERMINAL_STATES=["completed","failed","failure","cancelled"];
 function elapsed(t){if(t.status==="whitelisting"&&t.whitelistStart)return"WL "+fmtSec((Date.now()-t.whitelistStart)/1000);if(t.apiCreatedAt){const end=t.apiUpdatedAt||Math.floor(Date.now()/1000);return fmtSec(end-t.apiCreatedAt)}const start=t.startTime||t.created;return fmtSec(((t.endTime||Date.now())-start)/1000)}
 
 function renderTaskInput(t) {
@@ -1679,8 +1680,14 @@ function restoreInput(taskId) {
   document.getElementById("compose-box").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function videoPlaybackUrl(url) {
+  if (!url || !/^https:\/\//i.test(url)) return url || "";
+  return `/api/video-proxy?url=${encodeURIComponent(url)}`;
+}
+
 function renderOneTask(t) {
   const SL = {submitting:"Submitting",whitelisting:"Whitelisting",submitted:"Queued",processing:"Generating",running:"Generating",completed:"Done",failed:"Failed",cancelled:"Cancelled"};
+  if (t.status === "failure") t.status = "failed";
   // Safety net: if we have a videoUrl, always show as completed regardless of stored status
   if (t.videoUrl && t.status !== "completed") { t.status = "completed"; t.progress = null; }
   const isLive = t.status === "submitting" || t.status === "whitelisting";
@@ -1698,7 +1705,7 @@ function renderOneTask(t) {
   h += `<div class="task-body">`;
   h += renderTaskInput(t);
   if (t.videoUrl) {
-    h += `<video class="task-video" src="${esc(t.videoUrl)}" controls preload="none"></video>`;
+    h += `<video class="task-video" src="${esc(videoPlaybackUrl(t.videoUrl))}" controls playsinline preload="metadata"></video>`;
     if (!t.demo) h += `<div class="task-actions"><input type="text" value="${esc(t.videoUrl)}" readonly onclick="this.select()"><button onclick="navigator.clipboard.writeText('${escJs(t.videoUrl)}')">Copy</button><a href="${esc(t.videoUrl)}" target="_blank" download class="s">Save</a></div>`;
   }
   const detailsOpen = t.status === "failed" ? " open" : "";

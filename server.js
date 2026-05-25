@@ -833,6 +833,56 @@ app.get("/api/status/:id", async (req, res) => {
   }
 });
 
+function isAllowedVideoProxyUrl(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { return false; }
+  if (u.protocol !== "https:") return false;
+  const host = u.hostname.toLowerCase();
+  if (host === "localhost" || host === "0.0.0.0" || /^127\./.test(host) || /^10\./.test(host)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^192\.168\./.test(host)) {
+    return false;
+  }
+  return host.endsWith(".tos-cn-beijing.volces.com")
+    || host.endsWith(".cos.na-siliconvalley.myqcloud.com")
+    || host.endsWith(".cos.ap-beijing.myqcloud.com")
+    || host.endsWith(".cos.ap-guangzhou.myqcloud.com")
+    || host.endsWith(".cos.ap-shanghai.myqcloud.com");
+}
+
+async function proxyVideo(req, res) {
+  const rawUrl = typeof req.query.url === "string" ? req.query.url : "";
+  if (!rawUrl || !isAllowedVideoProxyUrl(rawUrl)) {
+    return res.status(400).json({ error: "Invalid video URL" });
+  }
+
+  const controller = new AbortController();
+  const onClose = () => controller.abort();
+  res.on("close", onClose);
+  try {
+    const headers = { Accept: "video/mp4,video/*,*/*" };
+    if (req.headers.range) headers.Range = req.headers.range;
+    const upstream = await fetch(rawUrl, { method: req.method === "HEAD" ? "HEAD" : "GET", headers, signal: controller.signal });
+    res.status(upstream.status);
+    for (const h of ["content-type", "content-length", "content-range", "accept-ranges", "last-modified", "etag"]) {
+      const v = upstream.headers.get(h);
+      if (v) res.setHeader(h, v);
+    }
+    if (!res.getHeader("content-type")) res.setHeader("content-type", "video/mp4");
+    if (!res.getHeader("accept-ranges")) res.setHeader("accept-ranges", "bytes");
+    res.setHeader("cache-control", "private, no-store");
+    if (req.method === "HEAD" || !upstream.body) return res.end();
+    await pipeline(Readable.fromWeb(upstream.body), res);
+  } catch (err) {
+    if (err.name === "AbortError" || res.headersSent) return;
+    res.status(502).json({ error: "Video proxy failed" });
+  } finally {
+    res.off("close", onClose);
+  }
+}
+
+app.get("/api/video-proxy", proxyVideo);
+app.head("/api/video-proxy", proxyVideo);
+
 // ── COS Configuration ──
 const COS_BUCKET = process.env.COS_BUCKET;
 const COS_REGION = process.env.COS_REGION;
