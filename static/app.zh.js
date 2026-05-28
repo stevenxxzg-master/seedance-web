@@ -567,6 +567,28 @@ function mentionThumbHtml(mType, url) {
   return `<img class="mention-inline-thumb" src="${esc(url)}">`;
 }
 
+function refreshMentionThumbnails() {
+  const el = document.getElementById("i-prompt");
+  if (!el) return;
+  for (const span of el.querySelectorAll(".mention")) {
+    const text = span.getAttribute("data-text") || span.textContent || "";
+    const m = text.match(/^@(图片|视频|音频)(\d+)$/);
+    if (!m) continue;
+    const mType = m[1] === "图片" ? "image" : m[1] === "视频" ? "video" : "audio";
+    const idx = parseInt(m[2], 10);
+    let count = 0;
+    const item = mediaItems.find(x => x.type === mType && ++count === idx);
+    span.innerHTML = "";
+    const thumbHtml = mentionThumbHtml(mType, item?.thumbUrl || item?.cosUrl || item?.url || "");
+    if (thumbHtml) {
+      const temp = document.createElement("span");
+      temp.innerHTML = thumbHtml;
+      span.appendChild(temp.firstChild);
+    }
+    span.appendChild(document.createTextNode(text));
+  }
+}
+
 function setPromptText(text) {
   const el = document.getElementById("i-prompt");
   if (!text) { el.innerHTML = ""; return; }
@@ -872,6 +894,7 @@ function updateMentionsAfterRemove(removedType, removedIdx) {
 
 function renderStack() {
   syncPrefs();
+  refreshMentionThumbnails();
   const container = document.getElementById("media-stack");
   const addWrap = document.getElementById("add-wrap");
 
@@ -1169,12 +1192,38 @@ function sanitizePrompt(s) {
     .trim();
 }
 
+function shortMediaName(name) {
+  return (name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+}
+
+function buildMediaReferenceGuide(refMode) {
+  const parts = [];
+  if (refMode === "keyframes") {
+    if (kfFirst) parts.push(`首帧=下方第1张图片${shortMediaName(kfFirst.name) ? `（${shortMediaName(kfFirst.name)}）` : ""}`);
+    if (kfLast) parts.push(`尾帧=下方第2张图片${shortMediaName(kfLast.name) ? `（${shortMediaName(kfLast.name)}）` : ""}`);
+  } else {
+    const counts = { image: 0, video: 0, audio: 0 };
+    const labels = { image: "图片", video: "视频", audio: "音频" };
+    for (const item of mediaItems) {
+      if (!item || !labels[item.type]) continue;
+      if (!(item.cosUrl || item.url || item.assetUrl)) continue;
+      counts[item.type]++;
+      const label = labels[item.type];
+      const name = shortMediaName(item.name);
+      parts.push(`@${label}${counts[item.type]}=下方第${counts[item.type]}个${label}素材${name ? `（${name}）` : ""}`);
+    }
+  }
+  return parts.length ? `素材编号说明：${parts.join("；")}。` : "";
+}
+
 function buildRequest() {
   const content = [];
-  const prompt = sanitizePrompt(getPromptText());
-  if (prompt) content.push({ type: "text", text: prompt });
-
   const refMode = document.getElementById("i-ref").value;
+  const prompt = sanitizePrompt(getPromptText());
+  const mediaGuide = sanitizePrompt(buildMediaReferenceGuide(refMode));
+  const upstreamPrompt = [mediaGuide, prompt].filter(Boolean).join("\n\n");
+  if (upstreamPrompt) content.push({ type: "text", text: upstreamPrompt });
+
   // 页面状态以稳定的桶 URL 为中心；服务端会在转发上游前把 image/video
   // 的 storage URL 解析成 asset://。
   const pickStorageOrAsset = (item) => {
@@ -1219,7 +1268,7 @@ function buildRequest() {
 
   const body = {
     model: document.getElementById("i-model").value,
-    prompt,
+    prompt: upstreamPrompt,
     content,
     resolution: document.getElementById("i-res").value,
     ratio: document.getElementById("i-ratio").value,
@@ -1788,6 +1837,8 @@ function translateError(raw) {
   const m = msg.toLowerCase();
   if (m.includes("unexpected end of json input") || m.includes("empty response body"))
     return "服务返回空响应，请稍后重试";
+  if (msg.includes("请删除该素材后重新上传") || msg.includes("删除该素材后重新上传"))
+    return "素材加白失败，请删除该素材后重新上传";
 
   // ── Gateway / auth ────────────────────────────────────────
   if (msg.includes("无效的令牌") || msg.includes("无效令牌") || m.includes("invalid token"))
@@ -2416,6 +2467,9 @@ async function whitelistAsset(id) {
       const item = mediaItems.find(m => (m.cosUrl || m.url) === data.asset.storage_url);
       if (item && data.asset.asset_id) item.assetUrl = data.asset.asset_id;
     }
+    if (data.error) {
+      showToast({ type: "warn", title: "素材加白失败", desc: translateError(data.error) || data.error, duration: 6000 });
+    }
   } catch (e) {
     console.warn("[AssetLib] Whitelist failed:", e.message);
     a.asset_status = "failed";
@@ -2488,6 +2542,10 @@ async function registerAssetOnUpload(item) {
         const idx = assetLibrary.findIndex(a => a.id === data.asset.id);
         if (idx >= 0) assetLibrary[idx] = data.asset;
         else assetLibrary.unshift(data.asset);
+        if (data.whitelistError) {
+          showToast({ type: "warn", title: "素材加白失败", desc: translateError(data.whitelistError) || data.whitelistError, duration: 6000 });
+        }
+        renderStack();
         renderAssetGrid();
         syncPrefs();
         return data.asset;

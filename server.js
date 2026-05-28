@@ -1331,11 +1331,21 @@ async function serverEnsureAssetGroup(req) {
 // pending ids by (base, key) and run ONE ListAssets per tick that covers every
 // id the group is waiting on. Same total wall time, ~10× fewer upstream calls.
 //
-// Each group entry: { req, pending: Map<assetId, {resolve,reject}>, ticker, busy }
+// Each group entry: { req, pending: Map<assetId, {resolve,reject,startedAt,pollErrors,notVisible}>, ticker, busy }
 const _pollGroups = new Map();
 const POLL_INTERVAL_MS = 3000;
+const ASSET_POLL_MAX_FAILED_TICKS = 2;
+const ASSET_POLL_MAX_MS = 120000;
+const ASSET_REUPLOAD_HINT = "素材加白失败，请删除该素材后重新上传";
 
 function poolKey(req) { return getBase(req) + "|" + getKey(req); }
+
+function rejectPendingAsset(group, assetId, reason) {
+  const waiter = group.pending.get(assetId);
+  if (!waiter) return;
+  group.pending.delete(assetId);
+  waiter.reject(new Error(`${ASSET_REUPLOAD_HINT}${reason ? `（${reason}）` : ""}`));
+}
 
 async function listAssetsByIds(req, ids, { scanIfMissing = false, logPrefix = "ListAssets" } = {}) {
   const wanted = new Set((ids || []).filter(Boolean));
@@ -1399,30 +1409,53 @@ async function runPollTick(key) {
       items = [...byId.values()];
     } catch (e) {
       console.warn(`[PollGroup] ListAssets error for ${ids.length} id(s):`, e.message);
+      for (const id of ids) {
+        const waiter = group.pending.get(id);
+        if (!waiter) continue;
+        waiter.pollErrors = (waiter.pollErrors || 0) + 1;
+        if (waiter.pollErrors >= ASSET_POLL_MAX_FAILED_TICKS) {
+          console.warn(`[PollGroup] Asset ${id} failed after ${waiter.pollErrors} ListAssets error(s); giving up`);
+          rejectPendingAsset(group, id, "状态查询失败");
+        }
+      }
       return; // try again next tick
     }
     const seen = new Set();
     for (const item of items) {
       if (!item.Id || !group.pending.has(item.Id)) continue;
       seen.add(item.Id);
+      const w = group.pending.get(item.Id);
+      if (w) {
+        w.pollErrors = 0;
+        w.notVisible = 0;
+      }
       const status = item.Status;
       const itemUrl = typeof item.URL === "string" ? item.URL : "";
       const urlOk = itemUrl.startsWith("https://") || itemUrl.startsWith("http://");
       console.log(`[Asset ${item.Id}] Status: ${status}${status === "Active" && !urlOk ? " (URL not ready)" : ""}`);
       if (status === "Active" && urlOk) {
-        const w = group.pending.get(item.Id);
         group.pending.delete(item.Id);
         w.resolve(item.Id);
       } else if (status === "Failed" || status === "failed") {
-        const w = group.pending.get(item.Id);
         group.pending.delete(item.Id);
-        w.reject(new Error("Asset whitelisting failed: " + (item.FailReason || "unknown")));
+        w.reject(new Error(`${ASSET_REUPLOAD_HINT}：${item.FailReason || "unknown"}`));
+      } else if (Date.now() - (w.startedAt || Date.now()) >= ASSET_POLL_MAX_MS) {
+        console.warn(`[PollGroup] Asset ${item.Id} still ${status || "unknown"} after ${ASSET_POLL_MAX_MS}ms; giving up`);
+        rejectPendingAsset(group, item.Id, "加白超时");
       }
       // else (Active no URL, Processing): keep waiting
     }
     for (const id of ids) {
       if (!seen.has(id)) {
-        console.log(`[Asset ${id}] not visible yet via ListAssets, retrying`);
+        const waiter = group.pending.get(id);
+        if (!waiter) continue;
+        waiter.notVisible = (waiter.notVisible || 0) + 1;
+        if (waiter.notVisible >= ASSET_POLL_MAX_FAILED_TICKS) {
+          console.warn(`[PollGroup] Asset ${id} not visible after ${waiter.notVisible} poll(s); giving up`);
+          rejectPendingAsset(group, id, "素材未同步");
+        } else {
+          console.log(`[Asset ${id}] not visible yet via ListAssets, retrying`);
+        }
       }
     }
   } finally {
@@ -1448,7 +1481,7 @@ function awaitAssetActive(req, assetId) {
     group.req = req;
   }
   return new Promise((resolve, reject) => {
-    group.pending.set(assetId, { resolve, reject });
+    group.pending.set(assetId, { resolve, reject, startedAt: Date.now(), pollErrors: 0, notVisible: 0 });
     if (!group.ticker) {
       group.ticker = setInterval(() => { runPollTick(key); }, POLL_INTERVAL_MS);
       // Kick off an immediate first tick after a small delay so the asset has
