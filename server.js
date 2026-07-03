@@ -808,7 +808,42 @@ function getAssetRecovery(req, assetUrl) {
   return null;
 }
 
+function isLikelyVideoUrl(url) {
+  return typeof url === "string" && /^https?:\/\//i.test(url) && /\.(mp4|mov|webm)(?:[?#]|$)/i.test(url);
+}
+
+function findVideoUrlInPayload(data) {
+  const direct = [
+    data?.video?.url, data?.video_url, data?.videoUrl, data?.url,
+    data?.video_result?.[0]?.url, data?.videos?.[0]?.url,
+    data?.output?.video_url, data?.output?.videoUrl, data?.output?.url,
+    data?.data?.video?.url, data?.data?.video_url, data?.data?.videoUrl, data?.data?.url,
+    data?.data?.video_result?.[0]?.url, data?.data?.videos?.[0]?.url,
+    data?.data?.output?.video_url, data?.data?.output?.videoUrl, data?.data?.output?.url,
+    data?.data?.result?.video_url, data?.data?.result?.videoUrl, data?.data?.result?.video?.url, data?.data?.result?.url,
+  ].find(isLikelyVideoUrl);
+  if (direct) return direct;
+  const match = JSON.stringify(data || {}).match(/(https?:\/\/[^"\\]+\.(?:mp4|mov|webm)(?:[^"\\]*)?)/i);
+  return match ? match[1] : "";
+}
+
+function summarizeStatusPayload(data) {
+  const wrap = data?.data || data || {};
+  const inner = wrap?.data || wrap || {};
+  const videoUrl = findVideoUrlInPayload(data);
+  return {
+    code: data?.code || "",
+    task: inner?.task_id || wrap?.task_id || inner?.id || wrap?.id || data?.id || "",
+    upstreamStatus: data?.status || inner?.status || wrap?.status || "",
+    failReason: inner?.fail_reason || wrap?.fail_reason || data?.fail_reason || "",
+    hasVideo: Boolean(videoUrl),
+    video: videoUrl ? safeUrlTag(videoUrl) : "",
+  };
+}
+
 app.get("/api/status/:id", async (req, res) => {
+  const rid = requestId(req, "status");
+  const started = Date.now();
   try {
     const resp = await fetch(
       `${getBase(req)}/v1/video/generations/${encodeURIComponent(req.params.id)}`,
@@ -821,12 +856,27 @@ app.get("/api/status/:id", async (req, res) => {
       }
     );
     const text = await resp.text();
+    let data = null;
     try {
-      res.status(resp.status).json(JSON.parse(text));
+      data = JSON.parse(text);
     } catch {
+      data = null;
+    }
+    diag("status.upstream", {
+      rid,
+      task: req.params.id,
+      httpStatus: resp.status,
+      ok: resp.ok,
+      ms: Date.now() - started,
+      ...(data ? summarizeStatusPayload(data) : { bodyLen: text.length, bodyHash: shortHash(text) }),
+    });
+    if (data) {
+      res.status(resp.status).json(data);
+    } else {
       res.status(resp.status).json({ error: text });
     }
   } catch (err) {
+    diag("status.error", { rid, task: req.params.id, message: err.message, ms: Date.now() - started });
     res
       .status(err.message === "API Key is required" ? 401 : 502)
       .json({ error: err.message });

@@ -149,6 +149,7 @@ function applyPrefs(p) {
     for (const t of p.tasks) {
       if (t.status === "failure") t.status = "failed";
       if (t.videoUrl) { t.status = "completed"; t.progress = null; }
+      rescueNonTerminalSuccess(t);
       tasks.push(t);
     }
     renderTasks();
@@ -1521,16 +1522,28 @@ function stopPolling() {
 
 async function pollAll() {
   const TERMINAL = ["completed","failed","failure","cancelled"];
+  let changed = false;
+  for (const task of tasks) {
+    if (rescueNonTerminalSuccess(task)) changed = true;
+  }
   const running = tasks.filter(t => t.id && !TERMINAL.includes(t.status));
   if (running.length === 0) { clearInterval(pollTimer); pollTimer = null; saveTasks(); renderTasks(); return; }
-  let changed = false;
   for (const task of running) {
     try {
       const resp = await fetch(`/api/status/${task.id}`, { headers: apiHeaders() });
       const data = await readJsonResponse(resp);
       task.response = data;
-      if (resp.ok && data.code !== "fail_to_fetch_task") {
-        const parsed = parseResponse(data);
+      const parsed = parseResponse(data);
+      if (parsed.videoUrl) {
+        if (!task.videoUrl) task.videoUrl = parsed.videoUrl;
+        if (task.status !== "completed") changed = true;
+        task.status = "completed";
+        task.progress = null;
+        if (parsed.createdAt) task.apiCreatedAt = parsed.createdAt;
+        if (parsed.updatedAt) task.apiUpdatedAt = parsed.updatedAt;
+        task.pollErrors = 0;
+        task.endTime = Date.now();
+      } else if (resp.ok && data.code !== "fail_to_fetch_task") {
         if (!task.videoUrl) task.videoUrl = parsed.videoUrl;
         const finalStatus = task.videoUrl ? "completed" : parsed.status;
         if (task.status !== finalStatus || task.progress !== parsed.progress || (!task.videoUrl && parsed.videoUrl)) changed = true;
@@ -1540,20 +1553,19 @@ async function pollAll() {
         if (parsed.updatedAt) task.apiUpdatedAt = parsed.updatedAt;
         task.pollErrors = 0;
       } else {
-        // If we already have a videoUrl, the generation succeeded — mark completed instead of failed
+        // Status polling can fail transiently while the upstream task keeps running.
+        // Never turn a generation into "failed" unless upstream returns a terminal status.
         if (task.videoUrl) {
           task.status = "completed"; task.endTime = Date.now(); changed = true;
         } else {
-          task.pollErrors = (task.pollErrors||0)+1;
-          if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
+          changed = noteTransientPollFailure(task) || changed;
         }
       }
     } catch(e) {
       if (task.videoUrl) {
         task.status = "completed"; task.endTime = Date.now(); changed = true;
       } else {
-        task.pollErrors = (task.pollErrors||0)+1;
-        if (task.pollErrors >= 5) { task.status="failed"; task.endTime=Date.now(); changed=true; }
+        changed = noteTransientPollFailure(task) || changed;
       }
     }
   }
@@ -1562,6 +1574,32 @@ async function pollAll() {
 }
 
 const STATUS_MAP = {"IN_PROGRESS":"running","SUCCESS":"completed","FAILED":"failed","FAILURE":"failed","CANCELLED":"cancelled","running":"running","completed":"completed","failed":"failed","failure":"failed","cancelled":"cancelled","submitted":"submitted","success":"completed","succeeded":"completed","done":"completed"};
+const TERMINAL_FAILURE_STATUSES = ["failed","failure","cancelled"];
+
+function rescueNonTerminalSuccess(task) {
+  if (!task || task.videoUrl || !["failed","failure"].includes(task.status)) return false;
+  if (!task.response || task.response.code !== "success") return false;
+  const parsed = parseResponse(task.response);
+  if (TERMINAL_FAILURE_STATUSES.includes(parsed.status)) return false;
+  task.status = parsed.status || "running";
+  task.progress = parsed.progress ?? task.progress ?? null;
+  task.error = "";
+  task.endTime = null;
+  if (parsed.videoUrl) {
+    task.videoUrl = parsed.videoUrl;
+    task.status = "completed";
+    task.progress = null;
+  }
+  return true;
+}
+
+function noteTransientPollFailure(task) {
+  const before = task.status;
+  task.pollErrors = (task.pollErrors || 0) + 1;
+  task.lastPollErrorAt = Date.now();
+  if (!task.status || task.status === "submitted") task.status = "running";
+  return before !== task.status;
+}
 
 function parseResponse(raw) {
   const wrap = raw.data||raw; const inner = wrap.data||wrap;
@@ -1577,8 +1615,21 @@ function parseResponse(raw) {
 }
 
 function findVideoUrl(d) {
-  if(d.video?.url)return d.video.url; if(d.video_result?.[0]?.url)return d.video_result[0].url; if(d.output?.video_url)return d.output.video_url;
-  const m=JSON.stringify(d).match(/(https?:\/\/[^"\\]+\.mp4[^"\\]*)/); return m?m[1]:null;
+  const direct = [
+    d?.video?.url, d?.video_url, d?.videoUrl, d?.url,
+    d?.video_result?.[0]?.url, d?.videos?.[0]?.url,
+    d?.output?.video_url, d?.output?.videoUrl, d?.output?.url,
+    d?.data?.video?.url, d?.data?.video_url, d?.data?.videoUrl, d?.data?.url,
+    d?.data?.video_result?.[0]?.url, d?.data?.videos?.[0]?.url,
+    d?.data?.output?.video_url, d?.data?.output?.videoUrl, d?.data?.output?.url,
+    d?.data?.result?.video_url, d?.data?.result?.videoUrl, d?.data?.result?.video?.url, d?.data?.result?.url,
+  ].find(isLikelyVideoUrl);
+  if (direct) return direct;
+  const m=JSON.stringify(d).match(/(https?:\/\/[^"\\]+\.(?:mp4|mov|webm)(?:[^"\\]*)?)/i); return m?m[1]:null;
+}
+
+function isLikelyVideoUrl(v) {
+  return typeof v === "string" && /^https?:\/\//i.test(v) && /\.(mp4|mov|webm)(?:[?#]|$)/i.test(v);
 }
 
 function fmtSec(s){if(s<0)s=0;s=Math.floor(s);const m=Math.floor(s/60);return m>0?`${m}m ${s%60}s`:`${s}s`}
@@ -1716,6 +1767,7 @@ function restoreInput(taskId) {
 function renderOneTask(t) {
   const SL = {submitting:"提交中",whitelisting:"素材加白中",submitted:"已提交",processing:"生成中",running:"生成中",completed:"完成",failed:"失败",cancelled:"已取消"};
   if (t.status === "failure") t.status = "failed";
+  rescueNonTerminalSuccess(t);
   // 兜底：只要有 videoUrl，状态一律视为完成，避免 UI 卡在"生成中"
   if (t.videoUrl && t.status !== "completed") { t.status = "completed"; t.progress = null; }
   const isLive = t.status === "submitting" || t.status === "whitelisting";
